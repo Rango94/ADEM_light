@@ -1,22 +1,58 @@
-#coding:UTF-8
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# @File  : ADEM_light_train.py
+# @Author: nanzhi.wang
+# @Date  : 2018/9/17
+
 import sys
 
 from ADEM_light import *
-import os
+from data_helper import *
+
+def tostring(config):
+    keys_ = config.keys()
+    keys_.sort()
+    return '-'.join([key + '_' + str(config[key]) for key in keys_])
+
+def Rename(config_old,config_new):
+    model_name_old = tostring(config_old)
+    model_name_new = tostring(config_new)
+
+    if model_name_new==model_name_old:
+        return 0
+    else:
+        for file in os.listdir('../MODEL'):
+            print(file)
+            if model_name_old in file:
+                print '将%s改为%s'%(file,file.replace(model_name_old,model_name_new))
+                os.rename('../MODEL/'+file, '../MODEL/'+file.replace(model_name_old,model_name_new))
+
+# config_old={'score_style':'mine',
+#         'normal':False,
+#         'LR':0.2,
+#         'cate':'mlut',
+#         'weight':True,
+#         'data':'all',
+#         'seg':'jieba',
+#         'prewordembedding':True,
+#         }
 
 config={'score_style':'mine',
-            'normal':False,
+        'normal':True,
         'LR':0.2,
         'cate':'mlut',
         'weight':True,
-        'data':'all'
+        'data':'all',
+        'seg':'nio',
+        'prewordembedding':True,
         }
 
 if len(sys.argv)==2:
     config['data']=sys.argv[1]
 
-model_name='-'.join([key+'_'+str(config[key]) for key in config])
+# Rename(config_old,config)
 
+model_name=tostring(config)
 CHECKPOINT_PATH = '../MODEL/' + model_name + '_ckpt'
 
 if os.path.exists(CHECKPOINT_PATH+'.index'):
@@ -25,24 +61,9 @@ else:
     exists_flag=False
 
 
-# if config['data']=='orgin':
-#     sys.path.append('./DATA_orgin')
-#     from data_helper import *
-# elif config['data']=='8':
-#     sys.path.append('./DATA_8')
-#     from data_helper import *
-# elif config['data']=='9':
-#     sys.path.append('./DATA_9')
-#     from data_helper import *
-# elif config['data']=='total':
-#     sys.path.append('./DATA_total')
-#     from data_helper import *
+dp = data_helper(config=config)
 
-from data_helper import *
-
-dp = data_helper(data_flag=config['data'],dic_file='word_dic',cate=config['cate'], weight=config['weight'])
-
-config_1={
+config_network={
    'HIDDEN_SIZE':128,
     'NUM_LAYERS':1,
     'SRC_VOCAB_SIZE':dp.vocab_size,
@@ -50,11 +71,12 @@ config_1={
     'NUM_EPOCH':5,
     'KEEP_PROB':0.8,
     'MAX_GRAD_NORM':5,
+    'word_embedding_file':'word_dic_jieba_embedding.pk' if config['seg']=='jieba' else 'word_dic_nioseg_embedding.pk'
 }
 
 def main():
 
-    train_model=ADEM_model(config, config_1)
+    train_model=ADEM_model(config, config_network)
 
     saver=tf.train.Saver()
     step=0
@@ -62,7 +84,12 @@ def main():
     min_=9999
     marks=[]
 
-    with tf.Session() as sess:
+    config_tf = tf.ConfigProto()
+    config_tf.gpu_options.per_process_gpu_memory_fraction = 0.5
+    config_tf.gpu_options.allow_growth = True
+
+    with tf.Session(config=config_tf) as sess:
+
         tf.global_variables_initializer().run()
 
         if exists_flag:
@@ -107,7 +134,7 @@ def main():
                 marks.append([i, loss])
                 for k in marks:
                     print(k)
-                print('DATA:',config['data'],dp.train_file_list[(dp.train_cont-1)%3] if config['data']=='all' else '')
+                print(config)
 
 if __name__=='__main__':
     main()

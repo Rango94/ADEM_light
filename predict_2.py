@@ -1,13 +1,13 @@
 #coding:UTF-8
-
 from sta_helper import *
 import matplotlib.pyplot as plt
 from ADEM_light import *
-
+from data_helper import *
+import codecs
 
 def write_in_file(file,score):
-    with open(file,'r',encoding='utf-8') as fo:
-        with open(file+'_marked','w',encoding='utf-8') as out:
+    with codecs.open(file,'r','utf-8') as fo:
+        with codecs.open(file+'_marked','w','utf-8') as out:
             for idx,line in enumerate(fo):
                 out.write('\t'.join(line.rstrip().split('\t')[:3])+'\t'+str(score[idx])+'\n\n')
 
@@ -17,14 +17,8 @@ CHECKPOINT_PATH='./MODEL/cate_mlut-weight_True-normal_False-score_style_mine-LR_
 
 # print(resolve_filename(CHECKPOINT_PATH))
 config=resolve_filename(CHECKPOINT_PATH)
-# config={'score_style':'mine',
-#             'normal':False,
-#         'LR':0.2,
-#         'cate':'mlut',
-#         'weight':True,
-#         'data':data_flag
-#         }
-# print(config)
+
+
 
 # if config['data']=='orgin':
 #     from DATA_orgin.data_helper import *
@@ -38,10 +32,7 @@ config=resolve_filename(CHECKPOINT_PATH)
 #     sys.path.append('./DATA_total')
 #     from DATA_total.data_helper import *
 
-from ADEM_light_code.data_helper import *
-
-
-dp=data_helper(data_flag=data_flag,test_file='./DATA_orgin/external_test_data_idx',cate=config['cate'],weight=config['weight'])
+dp=data_helper(config)
 
 config_1={
    'HIDDEN_SIZE':128,

@@ -1,6 +1,8 @@
-#coding:UTF-8
-import sys
-# from DATA_orgin.data_helper import *
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# @File  : sta_helper.py
+# @Author: nanzhi.wang
+# @Date  : 2018/9/17
 import numpy as np
 import math
 import random as rd
@@ -120,7 +122,7 @@ def Auc(human_score,predict_score,flag=False):
     return auc,yuzhi
 
 def looup(human_score,predict_score,all=False):
-    print('\n',end='')
+    print('\n',)
     k=0
     for i,j in zip(human_score,predict_score):
         if not all:
@@ -146,7 +148,7 @@ def recall_and_pre(human_s,predict_s,yuzhi=0.5,num=5):
         out[i,j]+=1
     for i in out:
         for j in i:
-            print(int(j),end=' ')
+            print(int(j),)
         print()
     for idx in range(num):
         print(idx,'recall:',out[idx,idx]/np.sum(out[idx,:]),'pre:',(out[idx,idx]/np.sum(out[:,idx]))if np.sum(out[:,idx])!=0 else 0)
@@ -165,38 +167,6 @@ def resolve_filename(filename):
         else:
             dic[key]=each[-1]
     return dic
-
-
-if __name__=='__main__':
-    predict_s=np.load('./model/predict_score/best_predict_score.npy')
-
-    dp=data_helper.data_helper()
-    human_score = dp.get_old_test_data()
-
-    baseline_rd,baseline_mean=baseline(human_score)
-
-    print('baseline_rd:',baseline_rd)
-    print('baseline_mean:',baseline_mean)
-
-    print('mean_square_error',mean_square_error(predict_s,human_score))
-    print('pre:',score_int(predict_s,human_score))
-    print(human_score.tolist())
-
-    #排序&&归一
-    human_score,predict_s=sort(human_score,predict_s)
-    predict_s=normal(predict_s)
-
-    # x=np.array([i for i in range(len(human_score))])
-    # y1=human_score
-    # y2=predict_s
-    #
-    # # plt.scatter(x,y1,s=2)
-    # # plt.scatter(x,y2,s=2)
-    # plt.scatter(y2,y1,s=2)
-    # plt.xlabel('model_score')
-    # plt.ylabel('human_score')
-    #
-    # plt.show()
 
 
 
