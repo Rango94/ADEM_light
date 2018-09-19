@@ -38,16 +38,58 @@ def Rename(config_old,config_new):
 #         }
 
 config={'score_style':'mine',
-        'normal':True,
-        'LR':0.2,
-        'cate':'mlut',
-        'weight':True,
-        'data':'all',
-        'seg':'nio',
-        'prewordembedding':True,
-        }
+                'normal':True,
+                'LR':0.2,
+                'cate':'mlut',
+                'weight':True,
+                'data':'all',
+                'seg':'ipx',
+                'prewordembedding':False,
+                }
 
 if len(sys.argv)==2:
+    if sys.argv[1]=='1':
+        config={'score_style':'mine',
+                'normal':True,
+                'LR':0.2,
+                'cate':'mlut',
+                'weight':True,
+                'data':'all',
+                'seg':'jieba',
+                'prewordembedding':False,
+                }
+    elif sys.argv[1]=='2':
+        config={'score_style':'mine',
+                'normal':True,
+                'LR':0.2,
+                'cate':'mlut',
+                'weight':True,
+                'data':'all',
+                'seg':'nio',
+                'prewordembedding':False,
+                }
+    elif sys.argv[1]=='3':
+        config={'score_style':'mine',
+                'normal':True,
+                'LR':0.2,
+                'cate':'mlut',
+                'weight':True,
+                'data':'all',
+                'seg':'jieba',
+                'prewordembedding':True,
+                }
+    elif sys.argv[1] == '4':
+        config={'score_style':'mine',
+                'normal':True,
+                'LR':0.2,
+                'cate':'mlut',
+                'weight':True,
+                'data':'all',
+                'seg':'nio',
+                'prewordembedding':True,
+                }
+
+if len(sys.argv)==2 and (sys.argv[1]=='all' or sys.argv[1]=='8' or sys.argv[1]=='9' or sys.argv[1]=='orgin'):
     config['data']=sys.argv[1]
 
 # Rename(config_old,config)
@@ -61,12 +103,12 @@ else:
     exists_flag=False
 
 
-dp = data_helper(config=config)
+dh = data_helper(config=config)
 
 config_network={
    'HIDDEN_SIZE':128,
     'NUM_LAYERS':1,
-    'SRC_VOCAB_SIZE':dp.vocab_size,
+    'SRC_VOCAB_SIZE':dh.vocab_size,
     'BARCH_SIZE':100,
     'NUM_EPOCH':5,
     'KEEP_PROB':0.8,
@@ -99,7 +141,7 @@ def main():
 
         for i in range(max_loop):
             context_input_, refrence_input_, model_input_, context_sequence_length_, \
-            refrence_sequence_length_,model_sequence_length_,human_score_,grad_ys_=dp.next_batch(300)
+            refrence_sequence_length_,model_sequence_length_,human_score_,grad_ys_=dh.next_batch(300)
 
             step=train_model.train_on_batch(sess,step,feed_dict_={'context_input':context_input_,
                                                                        'context_sequence_length':context_sequence_length_,
@@ -113,7 +155,7 @@ def main():
 
             if i % 100 == 0 and i!=0:
                 context_input_, refrence_input_, model_input_, context_sequence_length_, \
-                refrence_sequence_length_, model_sequence_length_, human_score_,grad_ys_= dp.get_val_data()
+                refrence_sequence_length_, model_sequence_length_, human_score_,grad_ys_= dh.get_val_data()
                 print(context_input_.shape, refrence_input_.shape, model_input_.shape,
                       context_sequence_length_.shape, refrence_sequence_length_.shape,
                       model_sequence_length_.shape, human_score_.shape)

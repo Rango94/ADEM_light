@@ -122,7 +122,6 @@ def Auc(human_score,predict_score,flag=False):
     return auc,yuzhi
 
 def looup(human_score,predict_score,all=False):
-    print('\n',)
     k=0
     for i,j in zip(human_score,predict_score):
         if not all:
@@ -148,8 +147,8 @@ def recall_and_pre(human_s,predict_s,yuzhi=0.5,num=5):
         out[i,j]+=1
     for i in out:
         for j in i:
-            print(int(j),)
-        print()
+            print int(j),
+        print
     for idx in range(num):
         print(idx,'recall:',out[idx,idx]/np.sum(out[idx,:]),'pre:',(out[idx,idx]/np.sum(out[:,idx]))if np.sum(out[:,idx])!=0 else 0)
 
@@ -164,6 +163,8 @@ def resolve_filename(filename):
             dic[key] = each[-1] == str(True)
         elif key=='normal':
             dic[key]=each[-1] == str(True)
+        elif key=='prewordembedding':
+            dic[key]=each[-1]==str(True)
         else:
             dic[key]=each[-1]
     return dic

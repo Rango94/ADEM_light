@@ -8,14 +8,14 @@ import tensorflow as tf
 import math
 import numpy as np
 import cPickle
-
+import jieba as jb
 
 class ADEM_model(object):
 
     def __init__(self, config, config_network):
 
         self.config=config
-        self.config_1=config_network
+        self.config_network=config_network
         self.HIDDEN_SIZE=config_network['HIDDEN_SIZE']
         self.NUM_LAYERS=config_network['NUM_LAYERS']
         self.SRC_VOCAB_SIZE=config_network['SRC_VOCAB_SIZE']
@@ -176,12 +176,14 @@ class ADEM_model(object):
                      self.model_input: feed_dict_['model_input'],
                      self.refrence_input: feed_dict_['refrence_input'],
                      self.model_sequence_length: feed_dict_['model_sequence_length'],
-                     self.refrence_sequence_length: feed_dict_['refrence_sequence_length'],
-                     self.human_score: feed_dict_['human_score']
+                     self.refrence_sequence_length: feed_dict_['refrence_sequence_length']
+                     # self.human_score: feed_dict_['human_score']
                      }
-
         model_score = session.run(self.model_score, feed_dict=feed_dict)
         return model_score
+
+
+
 
     def matrix_l1_norm(self,matrix):
         matrix = tf.cast(matrix, tf.float32)

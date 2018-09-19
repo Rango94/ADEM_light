@@ -37,7 +37,17 @@ class data_helper:
             self.train_file_list=[filename+'_nioseg' for filename in self.train_file_list]
             self.test_file_list = [filename + '_nioseg' for filename in self.test_file_list]
             self.val_file_list = [filename + '_nioseg' for filename in self.val_file_list]
-        self.train_fo_list=[codecs.open(filename,'r','utf-8') for filename in self.train_file_list]
+
+        if config['seg']=='ipx':
+            self.train_file_list = [filename + '_ipx' for filename in self.train_file_list]
+            self.test_file_list = [filename + '_ipx' for filename in self.test_file_list]
+            self.val_file_list = [filename + '_ipx' for filename in self.val_file_list]
+
+        try:
+            self.train_fo_list=[codecs.open(filename,'r','utf-8') for filename in self.train_file_list]
+        except:
+            pass
+
         if data_flag=='8':
             self.data_pre='../DATA_8/'
         elif data_flag=='9':
@@ -54,7 +64,10 @@ class data_helper:
         self.val_cont = 0
 
         self.test_idx=0
-        self.max_len=18
+        if dic_file=='ipx':
+            self.max_len=30
+        else:
+            self.max_len=18
         self.weight=weight
 
         if cate=='two':
@@ -65,9 +78,11 @@ class data_helper:
         if dic_file=='jieba_single':
             self.DIC_FILE = self.data_pre + 'word_dic_single'
         elif dic_file=='jieba':
-            self.DIC_FILE = 'word_dic'
+            self.DIC_FILE = 'word_dic_jieba'
         elif dic_file=='nio':
             self.DIC_FILE = 'word_dic_nioseg'
+        elif dic_file=='ipx':
+            self.DIC_FILE = 'word_dic_ipx'
 
 
         if train_file=='':
@@ -106,9 +121,11 @@ class data_helper:
             self.corpus_val=codecs.open(self.VAL_FILE, 'r', 'utf-8')
             self.corpus_test = codecs.open(self.TEST_FILE, 'r', 'utf-8')
         else:
-
-            self.change('val')
-            self.change('test')
+            try:
+                self.change('val')
+                self.change('test')
+            except:
+                pass
 
         self.vocab_size=len(self.word_dic)
 
@@ -148,7 +165,7 @@ class data_helper:
                     return False
 
     def generate_negative_sample(self):
-        context, true_response, model_response=[[self.get_random() for i in range(rd.randint(1, 18))] for _ in range(3)]
+        context, true_response, model_response=[[self.get_random() for i in range(rd.randint(1, self.max_len))] for _ in range(3)]
         human_score=0
         grads_wt=0.5
         return context, true_response, model_response,human_score,grads_wt
@@ -161,9 +178,6 @@ class data_helper:
 
 
     def generate_negative_sample_seq(self):
-        context_tmp=[]
-        true_response_tmp=[]
-        model_response_tmp=[]
         while True:
             self.train_cont = rd.randint(0, 2)
             self.TRAIN_FILE = self.train_file_list[self.train_cont]
@@ -236,8 +250,8 @@ class data_helper:
         while size>0:
             if rd.random()>0.7:
                 continue
-            if rd.random()<0.8:
-                if rd.random()<0.8:
+            if rd.random()<0.9:
+                if rd.random()<0.9:
                     self.train_cont=rd.randint(0,2)
                     self.TRAIN_FILE = self.train_file_list[self.train_cont]
                     self.corpus_train = self.train_fo_list[self.train_cont]
@@ -310,6 +324,50 @@ class data_helper:
                np.array(model_response),np.array(context_mask),\
                np.array(true_response_mask),np.array(model_response_mask),\
                np.array(human_score),np.array(grads_wt)
+
+
+    def normal_line(self,line):
+        context = []
+        true_response = []
+        model_response = []
+        context_mask = []
+        model_response_mask = []
+        true_response_mask = []
+        line = line.strip().split('\t')
+        if len(line)!=3:
+            print('line error')
+            return 0
+        context_tmp = [self.word_dic[i] for i in line[0].split(' ')]
+        true_response_tmp = [self.word_dic[i] for i in line[1].split(' ')]
+        model_response_tmp = [self.word_dic[i] for i in line[2].split(' ')]
+
+        if self.test_idx != 0:
+            context_mask.append(self.test_idx)
+            true_response_mask.append(self.test_idx)
+            model_response_mask.append(self.test_idx)
+        else:
+            context_mask.append(min(self.max_len, len(context_tmp)))
+            true_response_mask.append(min(self.max_len, len(true_response_tmp)))
+            model_response_mask.append(min(self.max_len, len(model_response_tmp)))
+
+        while len(context_tmp) < self.max_len:
+            context_tmp.append(0)
+        while len(context_tmp) > self.max_len:
+            context_tmp.pop(-1)
+        while len(true_response_tmp) < self.max_len:
+            true_response_tmp.append(0)
+        while len(true_response_tmp) > self.max_len:
+            true_response_tmp.pop(-1)
+        while len(model_response_tmp) < self.max_len:
+            model_response_tmp.append(0)
+        while len(model_response_tmp) > self.max_len:
+            model_response_tmp.pop(-1)
+
+        context.append(np.array(context_tmp))
+        true_response.append(np.array(true_response_tmp))
+        model_response.append(np.array(model_response_tmp))
+        return np.array(context), np.array(true_response), np.array(model_response), np.array(context_mask), np.array(
+            true_response_mask), np.array(model_response_mask)
 
     def get_test_data(self):
         context = []
@@ -519,6 +577,57 @@ class data_helper:
                np.array(model_response), np.array(context_mask), \
                np.array(true_response_mask), np.array(model_response_mask), \
                np.array(human_score), np.array(grads_wt)
+
+
+    def get_specific_data(self,file):
+        context = []
+        true_response = []
+        model_response = []
+        context_mask = []
+        model_response_mask = []
+        true_response_mask = []
+        corpus_specific=codecs.open(file, 'r', 'utf-8')
+        while True:
+            line = corpus_specific.readline()
+            if line == '':
+                break
+            line = line.strip().split('\t')
+            if len(line)<3:
+                continue
+            context_tmp = [int(i) for i in line[0].split(' ')]
+            true_response_tmp = [int(i) for i in line[1].split(' ')]
+            model_response_tmp = [int(i) for i in line[2].split(' ')]
+
+            if self.test_idx != 0:
+                context_mask.append(self.test_idx)
+                true_response_mask.append(self.test_idx)
+                model_response_mask.append(self.test_idx)
+            else:
+                context_mask.append(min(self.max_len, len(context_tmp)))
+                true_response_mask.append(min(self.max_len, len(true_response_tmp)))
+                model_response_mask.append(min(self.max_len, len(model_response_tmp)))
+
+            while len(context_tmp) < self.max_len:
+                context_tmp.append(0)
+            while len(context_tmp) > self.max_len:
+                context_tmp.pop(-1)
+            while len(true_response_tmp) < self.max_len:
+                true_response_tmp.append(0)
+            while len(true_response_tmp) > self.max_len:
+                true_response_tmp.pop(-1)
+            while len(model_response_tmp) < self.max_len:
+                model_response_tmp.append(0)
+            while len(model_response_tmp) > self.max_len:
+                model_response_tmp.pop(-1)
+
+            context.append(np.array(context_tmp))
+            true_response.append(np.array(true_response_tmp))
+            model_response.append(np.array(model_response_tmp))
+        corpus_specific.close()
+        corpus_specific = codecs.open(file, 'r', 'utf-8')
+
+        return np.array(context), np.array(true_response), np.array(model_response), np.array(context_mask), np.array(
+            true_response_mask), np.array(model_response_mask)
 
     def builddic(self):
         if not os.path.exists(self.DIC_FILE):
