@@ -5,21 +5,42 @@ from ADEM_light import *
 from data_helper import *
 import codecs
 
-def write_in_file(file,score):
+def write_in_file(file,score,word_dic):
 
     with codecs.open(file,'r','utf-8') as fo:
 
-        with codecs.open(file+'_marked','w','utf-8') as out:
+        with codecs.open(file+'_marked_'+word_dic,'w','utf-8') as out:
 
             for idx,line in enumerate(fo):
 
                 out.write('\t'.join(line.rstrip().split('\t')[:3])+'\t'+str(min(max(0,score[idx]),4))+'\n')
-    os.system("sort -t $'\t' -k4 -g -r ../DATA_test/"+file+"_marked > ../DATA_test/tmp")
-    os.system("mv ../DATA_test/tmp ../DATA_test/"+file+"_marked")
+    os.system("sort -t $'\t' -k4 -g -r ../DATA_test/"+file+"_marked_"+word_dic+" > ../DATA_test/tmp")
+    os.system("mv ../DATA_test/tmp ../DATA_test/"+file+"_marked_"+word_dic)
+
+def predict_on_file(sess,file,word_dic):
+    context_input, refrence_input, model_input, context_sequence_length, \
+    refrence_sequence_length, model_sequence_length= dp.get_specific_data(file+'_idx_'+word_dic)
+    print(context_input.shape, refrence_input.shape, model_input.shape,
+          context_sequence_length.shape, refrence_sequence_length.shape,
+          model_sequence_length.shape)
+
+    predict_score = train_model.predict_on_batch(sess, feed_dict_={'context_input': context_input,
+                                                                   'context_sequence_length': context_sequence_length,
+                                                                   'model_input': model_input,
+                                                                   'refrence_input': refrence_input,
+                                                                   'model_sequence_length': model_sequence_length,
+                                                                   'refrence_sequence_length': refrence_sequence_length,
+                                                                   })
+
+    std_score = np.zeros(len(predict_score))
+    print(mean_square_error(predict_score,std_score))
+    predict_score = np.reshape(predict_score, [len(predict_score)])
+    write_in_file(file, predict_score,word_dic)
+
 
 data_flag='all'
 
-CHECKPOINT_PATH='../MODEL/LR_0.2-cate_mlut-data_'+data_flag+'-normal_True-prewordembedding_False-score_style_mine-seg_jieba-weight_True_ckpt'
+CHECKPOINT_PATH='../MODEL/LR_0.2-cate_mlut-data_'+data_flag+'-normal_True-prewordembedding_False-score_style_mine-seg_nio-weight_True_ckpt'
 
 # print(resolve_filename(CHECKPOINT_PATH))
 config=resolve_filename(CHECKPOINT_PATH)
@@ -50,26 +71,7 @@ config_network={
     'word_embedding_file':'word_dic_jieba_embedding.pk' if config['seg']=='jieba' else 'word_dic_nioseg_embedding.pk'
 }
 
-def predict_on_file(sess,file,word_dic):
 
-    context_input, refrence_input, model_input, context_sequence_length, \
-    refrence_sequence_length, model_sequence_length= dp.get_specific_data(file+'_idx_'+word_dic)
-    print(context_input.shape, refrence_input.shape, model_input.shape,
-          context_sequence_length.shape, refrence_sequence_length.shape,
-          model_sequence_length.shape)
-
-    predict_score = train_model.predict_on_batch(sess, feed_dict_={'context_input': context_input,
-                                                                   'context_sequence_length': context_sequence_length,
-                                                                   'model_input': model_input,
-                                                                   'refrence_input': refrence_input,
-                                                                   'model_sequence_length': model_sequence_length,
-                                                                   'refrence_sequence_length': refrence_sequence_length,
-                                                                   })
-    std_score = np.zeros(len(predict_score))
-    print(mean_square_error(predict_score,std_score))
-
-    predict_score = np.reshape(predict_score, [len(predict_score)])
-    write_in_file(file, predict_score)
 
 
 if __name__=='__main__':
@@ -81,11 +83,12 @@ if __name__=='__main__':
         saver = tf.train.Saver()
         saver.restore(sess, CHECKPOINT_PATH)
 
-        predict_on_file(sess,'../DATA_test/random_test_data',config['seg'])
+        word_dic=config['seg'] if not config['seg'] =='nio' else 'nioseg'
 
 
+        predict_on_file(sess,'../DATA_test/random_test_data',word_dic)
 
-        predict_on_file(sess, '../DATA_test/external_test_data', config['seg'])
+        predict_on_file(sess, '../DATA_test/external_test_data', word_dic)
 
         # context_input, refrence_input, model_input, context_sequence_length, \
         # refrence_sequence_length, model_sequence_length, human_score, grad_ys = dp.get_test_data()

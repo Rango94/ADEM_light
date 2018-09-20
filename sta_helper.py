@@ -165,6 +165,8 @@ def resolve_filename(filename):
             dic[key]=each[-1] == str(True)
         elif key=='prewordembedding':
             dic[key]=each[-1]==str(True)
+        elif key=='attflag':
+            dic[key]=each[-1]==str(True)
         else:
             dic[key]=each[-1]
     return dic

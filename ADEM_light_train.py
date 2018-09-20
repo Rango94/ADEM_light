@@ -43,8 +43,9 @@ config={'score_style':'mine',
                 'cate':'mlut',
                 'weight':True,
                 'data':'all',
-                'seg':'ipx',
+                'seg':'jieba',
                 'prewordembedding':False,
+        'attflag':True
                 }
 
 if len(sys.argv)==2:
@@ -168,7 +169,6 @@ def main():
                                                                        'human_score':human_score_,
                                                                        'grad_ys':grad_ys_
                                                                        })
-
                 loss = train_model.mean_square_error(human_score_, model_score)
                 if loss < min_:
                     min_ = loss

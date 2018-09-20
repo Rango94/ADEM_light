@@ -3,7 +3,9 @@
 # @File  : ADEM_light.py
 # @Author: nanzhi.wang
 # @Date  : 2018/9/17
-
+'''
+policy grad
+'''
 import tensorflow as tf
 import math
 import numpy as np
@@ -23,41 +25,9 @@ class ADEM_model(object):
         self.NUM_EPOCH=config_network['NUM_EPOCH']
         self.KEEP_PROB=config_network['KEEP_PROB']
         self.MAX_GRAD_NORM=config_network['MAX_GRAD_NORM']
+        self.attention_flag=config['attflag']
+        self.max_len=18
 
-        initializer = tf.random_uniform_initializer(-0.5, 0.5)
-        with tf.variable_scope('nmt_model', reuse=None, initializer=initializer):
-            if not config['prewordembedding']:
-                self.embedding=tf.get_variable('emb', [self.SRC_VOCAB_SIZE, self.HIDDEN_SIZE])
-            else:
-                print('loading pretrained word embedding')
-                embedding_np = cPickle.load(open('../PRE_WORD_EMBEDDING/'+config_network['word_embedding_file'], "rb"))
-                print('loaded')
-                self.HIDDEN_SIZE =len(embedding_np[0])
-                self.embedding=tf.get_variable('emb',initializer=tf.convert_to_tensor(embedding_np,dtype=tf.float32),trainable=True)
-
-            self.context_cell=tf.nn.rnn_cell.MultiRNNCell(
-                [tf.nn.rnn_cell.BasicLSTMCell(self.HIDDEN_SIZE) for _ in range(self.NUM_LAYERS)])
-            self.model_cell=tf.nn.rnn_cell.MultiRNNCell(
-                [tf.nn.rnn_cell.BasicLSTMCell(self.HIDDEN_SIZE) for _ in range(self.NUM_LAYERS)])
-            self.refrence_cell = tf.nn.rnn_cell.MultiRNNCell(
-                [tf.nn.rnn_cell.BasicLSTMCell(self.HIDDEN_SIZE) for _ in range(self.NUM_LAYERS)])
-
-            with tf.variable_scope('output_layer'):
-                self.w1=tf.get_variable(name='w1',shape=[self.HIDDEN_SIZE*3*self.NUM_LAYERS,256])
-                self.bais1=tf.get_variable(name='bais1',shape=[1,256])
-                self.w2=tf.get_variable(name='w2',shape=[256,256])
-                self.bais2=tf.get_variable(name='bais2',shape=[1,256])
-                self.w3 = tf.get_variable(name='w3', shape=[256, 1])
-                self.bais3 = tf.get_variable(name='bais3', shape=[1])
-
-                self.N=tf.Variable(name='n',initial_value=tf.random_normal(
-                shape=[self.HIDDEN_SIZE*self.NUM_LAYERS,self.HIDDEN_SIZE*self.NUM_LAYERS]))
-                self.M=tf.Variable(name='m',initial_value=tf.random_normal(
-                shape=[self.HIDDEN_SIZE*self.NUM_LAYERS,self.HIDDEN_SIZE*self.NUM_LAYERS]))
-                self.Alpha=tf.Variable(
-                name='alpha', initial_value=tf.random_uniform([1], maxval=5.0))
-                self.Beta=tf.Variable(
-                name='beta', initial_value=tf.random_uniform([1], maxval=5.0))
         self.build_graph()
 
     def build_graph(self):
@@ -72,6 +42,54 @@ class ADEM_model(object):
 
         self.grad_ys = tf.placeholder(dtype=tf.float32, shape=[None], name='grad_ys')
         self.human_score = tf.placeholder(dtype=tf.float32, shape=[None], name='human_score')
+
+        initializer = tf.random_uniform_initializer(-0.5, 0.5)
+        with tf.variable_scope('nmt_model', reuse=None, initializer=initializer):
+            if not self.config['prewordembedding']:
+                self.embedding = tf.get_variable('emb', [self.SRC_VOCAB_SIZE, self.HIDDEN_SIZE])
+            else:
+                print('loading pretrained word embedding')
+                embedding_np = cPickle.load(
+                    open('../PRE_WORD_EMBEDDING/' + self.config_network['word_embedding_file'], "rb"))
+                print('loaded')
+                self.HIDDEN_SIZE = len(embedding_np[0])
+                self.embedding = tf.get_variable('emb',
+                                                 initializer=tf.convert_to_tensor(embedding_np, dtype=tf.float32),
+                                                 trainable=True)
+
+            self.context_cell = tf.nn.rnn_cell.MultiRNNCell(
+                [tf.nn.rnn_cell.BasicLSTMCell(self.HIDDEN_SIZE) for _ in range(self.NUM_LAYERS)])
+
+
+            self.model_cell = tf.nn.rnn_cell.MultiRNNCell(
+                [tf.nn.rnn_cell.BasicLSTMCell(self.HIDDEN_SIZE) for _ in range(self.NUM_LAYERS)])
+            self.refrence_cell = tf.nn.rnn_cell.MultiRNNCell(
+                [tf.nn.rnn_cell.BasicLSTMCell(self.HIDDEN_SIZE) for _ in range(self.NUM_LAYERS)])
+
+            with tf.variable_scope('attention'):
+                self.E = tf.constant(math.e, name='E')
+                self.attention_weight = tf.get_variable(name='att_weight', shape=[self.HIDDEN_SIZE * self.NUM_LAYERS,
+                                                                                  self.HIDDEN_SIZE * self.NUM_LAYERS])
+                self.att_context = tf.get_variable(name='att_context', shape=[1,self.HIDDEN_SIZE * self.NUM_LAYERS])
+                self.att_model_res = tf.get_variable(name='model_res', shape=[1,self.HIDDEN_SIZE * self.NUM_LAYERS])
+                self.att_refrence_res = tf.get_variable(name='refrence_res', shape=[1,self.HIDDEN_SIZE * self.NUM_LAYERS])
+
+            with tf.variable_scope('output_layer'):
+                self.w1 = tf.get_variable(name='w1', shape=[self.HIDDEN_SIZE * 3 * self.NUM_LAYERS, 256])
+                self.bais1 = tf.get_variable(name='bais1', shape=[1, 256])
+                self.w2 = tf.get_variable(name='w2', shape=[256, 256])
+                self.bais2 = tf.get_variable(name='bais2', shape=[1, 256])
+                self.w3 = tf.get_variable(name='w3', shape=[256, 1])
+                self.bais3 = tf.get_variable(name='bais3', shape=[1])
+
+                self.N = tf.Variable(name='n', initial_value=tf.random_normal(
+                    shape=[self.HIDDEN_SIZE * self.NUM_LAYERS, self.HIDDEN_SIZE * self.NUM_LAYERS]))
+                self.M = tf.Variable(name='m', initial_value=tf.random_normal(
+                    shape=[self.HIDDEN_SIZE * self.NUM_LAYERS, self.HIDDEN_SIZE * self.NUM_LAYERS]))
+                self.Alpha = tf.Variable(
+                    name='alpha', initial_value=tf.random_uniform([1], maxval=5.0))
+                self.Beta = tf.Variable(
+                    name='beta', initial_value=tf.random_uniform([1], maxval=5.0))
 
         context_state_h, model_state_h, refrence_state_h=self.forward(self.context_input, self.context_sequence_length, self.model_input,
                 self.model_sequence_length,self.refrence_input,
@@ -109,13 +127,18 @@ class ADEM_model(object):
             model_output,model_state=tf.nn.dynamic_rnn(self.model_cell, model_response_emb, sequence_length=model_response_size, dtype=tf.float32)
 
         with tf.variable_scope('refrence_encoder'):
-            refrence_output,refrence_state = tf.nn.dynamic_rnn(self.refrence_cell, refrence_response_emb, sequence_length=refrence_response_size,
-                                                 dtype=tf.float32)
+            refrence_output,refrence_state = tf.nn.dynamic_rnn(self.refrence_cell, refrence_response_emb, sequence_length=refrence_response_size,dtype=tf.float32)
 
         with tf.variable_scope('handle_output'):
-            context_state_h=self.get_h(context_state)
-            model_state_h=self.get_h(model_state)
-            refrence_state_h=self.get_h(refrence_state)
+
+            if self.attention_flag:
+                context_state_h = self.attetion(self.att_context,context_output,context_size)
+                model_state_h = self.attetion(self.att_model_res,model_output,model_response_size)
+                refrence_state_h = self.attetion(self.att_refrence_res,refrence_output,refrence_response_size)
+            else:
+                context_state_h=self.get_h(context_state)
+                model_state_h=self.get_h(model_state)
+                refrence_state_h=self.get_h(refrence_state)
 
         return context_state_h,model_state_h,refrence_state_h
 
@@ -182,6 +205,44 @@ class ADEM_model(object):
         model_score = session.run(self.model_score, feed_dict=feed_dict)
         return model_score
 
+    '''
+    采用的相似度计算方法：
+    a=z0*M*h
+    
+    '''
+
+    # tmp = tf.matmul(att_, self.attention_weight)
+    #
+    # tmp = tf.matmul(tf.reshape(state, shape=[-1, self.HIDDEN_SIZE]), tf.reshape(tmp, shape=[self.HIDDEN_SIZE, 1]))
+    #
+    # tmp = tf.reshape(tmp, [-1, 18])
+    #
+    # tmp = tmp * self.genarate_mask(length, 18)
+    #
+    # tmp = tf.nn.softmax(tmp)
+    #
+    # tmp = tf.matmul(tf.reshape(tmp, shape=[-1, 1, 18]), state)
+
+
+    def attetion(self,att_,state,length):
+        return tf.reshape(
+            tf.matmul(
+            tf.reshape(
+            tf.nn.softmax(
+            tf.reshape(
+            tf.matmul(
+            tf.reshape(
+            state, shape=[-1, self.HIDDEN_SIZE]),
+            tf.reshape(
+            tf.matmul(
+            att_, self.attention_weight), shape=[self.HIDDEN_SIZE, 1])), [-1, self.max_len]) *
+            tf.sequence_mask(
+            length, self.max_len, dtype=tf.float32)), shape=[-1, 1, self.max_len]), state),shape=[-1,self.HIDDEN_SIZE])
+
+
+
+    def genarate_mask(self,length,max_len):
+        return
 
 
 
@@ -193,7 +254,9 @@ class ADEM_model(object):
 
     def get_h(self,state):
         c,h=state[0]
+
         h=tf.reshape(h,[-1,self.HIDDEN_SIZE*self.NUM_LAYERS])
+
         return h
 
     def cast_to_float32(self,tensor_list):
