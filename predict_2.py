@@ -62,7 +62,7 @@ config_network={
     'SRC_VOCAB_SIZE':dp.vocab_size,
     'BARCH_SIZE':100,
     'NUM_EPOCH':5,
-    'KEEP_PROB':0.8,
+    'KEEP_PROB':1,
     'MAX_GRAD_NORM':5,
     'word_embedding_file':'word_dic_jieba_embedding.pk' if config['seg']=='jieba' else 'word_dic_nioseg_embedding.pk'
 }
@@ -82,9 +82,12 @@ if __name__=='__main__':
         word_dic=config['seg'] if not config['seg'] =='nio' else 'nioseg'
 
 
-        predict_on_file(sess,'../DATA_test/random_test_data',word_dic)
+        # predict_on_file(sess,'../DATA_test/random_test_data',word_dic)
+        #
+        # predict_on_file(sess, '../DATA_test/external_test_data', word_dic)
+        train_model.set_word_dic('word_dic_jieba')
 
-        predict_on_file(sess, '../DATA_test/external_test_data', word_dic)
+        print(train_model.predict_on_line(sess=sess,line=u'我最近好累啊\t要好好休息，知道吗\t知道你过得不好我就放心了'))
 
         # context_input, refrence_input, model_input, context_sequence_length, \
         # refrence_sequence_length, model_sequence_length, human_score, grad_ys = dp.get_test_data()

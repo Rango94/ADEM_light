@@ -11,6 +11,8 @@ import math
 import numpy as np
 import cPickle
 import jieba as jb
+import json
+import codecs
 
 class ADEM_model(object):
 
@@ -27,7 +29,6 @@ class ADEM_model(object):
         self.MAX_GRAD_NORM=config_network['MAX_GRAD_NORM']
         self.attention_flag=config['attflag']
         self.max_len=18
-
         self.build_graph()
 
     def build_graph(self):
@@ -202,8 +203,9 @@ class ADEM_model(object):
         return model_score
 
     '''
+    根据context final state分别计算其与refrence response和model response的attention，将attention的结果作为最终编码。
     采用的相似度计算方法：
-    a=z0*M*h
+    Alpha = h ✖ M ✖ context_state.T
     '''
     #
     def attetion(self, context_state, outputs, length):
@@ -278,5 +280,64 @@ class ADEM_model(object):
         for i,j in zip(human_score,predict_score):
             sum+=math.pow(i-j,2)
         return math.pow(sum/len(human_score),0.5)
+
+
+    def set_word_dic(self,word_dic_file):
+        self.word_dic = json.load(codecs.open(word_dic_file, 'r', 'utf-8'))
+
+        if 'jieba' in word_dic_file:
+            self.dic_flag='jieba'
+        elif 'ipx' in word_dic_file:
+            self.dic_flag='ipx'
+        else:
+            self.dic_flag='nio'
+
+        print '字典载入完毕'
+
+    def predict_on_line(self,sess,line):
+        if len(line.split('\t'))!=3:
+
+            print '格式错误'
+        else:
+            if self.dic_flag=='jieba':
+                context = []
+                true_response = []
+                model_response = []
+                context_mask = []
+                model_response_mask = []
+                true_response_mask = []
+                line = line.strip().split('\t')
+
+                context_tmp = [self.word_dic[i] for i in jb.cut(line[0])]
+                true_response_tmp = [self.word_dic[i]  for i in jb.cut(line[1])]
+                model_response_tmp = [self.word_dic[i]  for i in jb.cut(line[2])]
+                context_mask.append(min(self.max_len, len(context_tmp)))
+                true_response_mask.append(min(self.max_len, len(true_response_tmp)))
+                model_response_mask.append(min(self.max_len, len(model_response_tmp)))
+
+                while len(context_tmp) < self.max_len:
+                    context_tmp.append(0)
+                while len(context_tmp) > self.max_len:
+                    context_tmp.pop(-1)
+                while len(true_response_tmp) < self.max_len:
+                    true_response_tmp.append(0)
+                while len(true_response_tmp) > self.max_len:
+                    true_response_tmp.pop(-1)
+                while len(model_response_tmp) < self.max_len:
+                    model_response_tmp.append(0)
+                while len(model_response_tmp) > self.max_len:
+                    model_response_tmp.pop(-1)
+
+                context.append(np.array(context_tmp))
+                true_response.append(np.array(true_response_tmp))
+                model_response.append(np.array(model_response_tmp))
+
+                return self.predict_on_batch(sess,feed_dict_={'context_input':np.array(context),
+                                                              'refrence_input':np.array(true_response),
+                                                              'model_input':np.array(model_response),
+                                                              'context_sequence_length':np.array(context_mask),
+                                                              'refrence_sequence_length':np.array(true_response_mask),
+                                                              'model_sequence_length':np.array(model_response_mask)})
+
 
 

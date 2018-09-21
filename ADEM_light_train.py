@@ -17,110 +17,52 @@ def tostring(config):
 def Rename(config_old,config_new):
     model_name_old = tostring(config_old)
     model_name_new = tostring(config_new)
-
     if model_name_new==model_name_old:
         return 0
     else:
-        for file in os.listdir('../MODEL'):
+        for file in os.listdir('../MODEL/without_attention'):
             print(file)
             if model_name_old in file:
                 print '将%s改为%s'%(file,file.replace(model_name_old,model_name_new))
-                os.rename('../MODEL/'+file, '../MODEL/'+file.replace(model_name_old,model_name_new))
+                os.rename('../MODEL/without_attention/'+file, '../MODEL/without_attention/'+file.replace(model_name_old,model_name_new))
 
-# config_old={'score_style':'mine',
-#         'normal':False,
-#         'LR':0.2,
-#         'cate':'mlut',
-#         'weight':True,
-#         'data':'all',
-#         'seg':'jieba',
-#         'prewordembedding':True,
-#         }
-
-config={'score_style':'mine',
-                'normal':True,
-                'LR':1,
-                'cate':'mlut',
-                'weight':True,
-                'data':'all',
-                'seg':'jieba',
-                'prewordembedding':False,
-        'attflag':True
-                }
+config={'score_style':'mine','normal':True,'LR':1,'cate':'mlut','weight':True,'data':'all','seg':'jieba','prewordembedding':False,'attflag':True}
 
 if len(sys.argv)==2:
     if sys.argv[1]=='1':
-        config={'score_style':'mine',
-                'normal':True,
-                'LR':0.2,
-                'cate':'mlut',
-                'weight':True,
-                'data':'all',
-                'seg':'jieba',
-                'prewordembedding':False,
-                }
+        config={'score_style':'mine','normal':True,'LR':0.2,'cate':'mlut','weight':True,'data':'all','seg':'jieba','prewordembedding':False,'attflag':True}
     elif sys.argv[1]=='2':
-        config={'score_style':'mine',
-                'normal':True,
-                'LR':0.2,
-                'cate':'mlut',
-                'weight':True,
-                'data':'all',
-                'seg':'nio',
-                'prewordembedding':False,
-                }
+        config={'score_style':'mine','normal':True,'LR':0.2,'cate':'mlut','weight':True,'data':'all','seg':'nio','prewordembedding':False,'attflag':True}
     elif sys.argv[1]=='3':
-        config={'score_style':'mine',
-                'normal':True,
-                'LR':0.2,
-                'cate':'mlut',
-                'weight':True,
-                'data':'all',
-                'seg':'jieba',
-                'prewordembedding':True,
-                }
+        config={'score_style':'mine','normal':True,'LR':0.2,'cate':'mlut','weight':True,'data':'all','seg':'jieba','prewordembedding':True,'attflag':True}
     elif sys.argv[1] == '4':
-        config={'score_style':'mine',
-                'normal':True,
-                'LR':0.2,
-                'cate':'mlut',
-                'weight':True,
-                'data':'all',
-                'seg':'nio',
-                'prewordembedding':True,
-                }
+        config={'score_style':'mine','normal':True,'LR':0.2,'cate':'mlut','weight':True,'data':'all','seg':'nio','prewordembedding':True,'attflag':True}
 
 if len(sys.argv)==2 and (sys.argv[1]=='all' or sys.argv[1]=='8' or sys.argv[1]=='9' or sys.argv[1]=='orgin'):
     config['data']=sys.argv[1]
 
-# Rename(config_old,config)
-
-model_name=tostring(config)
-CHECKPOINT_PATH = '../MODEL/' + model_name + '_ckpt'
-
-if os.path.exists(CHECKPOINT_PATH+'.index'):
-    exists_flag=True
-else:
-    exists_flag=False
-
-
-dh = data_helper(config=config)
-
-config_network={
-   'HIDDEN_SIZE':128,
-    'NUM_LAYERS':1,
-    'SRC_VOCAB_SIZE':dh.vocab_size,
-    'BARCH_SIZE':100,
-    'NUM_EPOCH':5,
-    'KEEP_PROB':0.8,
-    'MAX_GRAD_NORM':5,
-    'word_embedding_file':'word_dic_jieba_embedding.pk' if config['seg']=='jieba' else 'word_dic_nioseg_embedding.pk'
-}
-
 def main():
+    model_name = tostring(config)
+    CHECKPOINT_PATH = '../MODEL/' + model_name + '_ckpt'
+    if os.path.exists(CHECKPOINT_PATH + '.index'):
+        exists_flag = True
+    else:
+        exists_flag = False
 
+    dh = data_helper(config=config)
+
+    config_network = {
+        'HIDDEN_SIZE': 128,
+        'NUM_LAYERS': 1,
+        'SRC_VOCAB_SIZE': dh.vocab_size,
+        'BARCH_SIZE': 100,
+        'NUM_EPOCH': 5,
+        'KEEP_PROB': 0.8,
+        'MAX_GRAD_NORM': 5,
+        'word_embedding_file': 'word_dic_jieba_embedding.pk' if config[
+                                                                    'seg'] == 'jieba' else 'word_dic_nioseg_embedding.pk'
+    }
     train_model=ADEM_model(config, config_network)
-
     saver=tf.train.Saver()
     step=0
     max_loop=9999999
