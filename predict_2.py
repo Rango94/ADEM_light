@@ -6,13 +6,9 @@ from data_helper import *
 import codecs
 
 def write_in_file(file,score,word_dic):
-
     with codecs.open(file,'r','utf-8') as fo:
-
         with codecs.open(file+'_marked_'+word_dic,'w','utf-8') as out:
-
             for idx,line in enumerate(fo):
-
                 out.write('\t'.join(line.rstrip().split('\t')[:3])+'\t'+str(min(max(0,score[idx]),4))+'\n')
     os.system("sort -t $'\t' -k4 -g -r ../DATA_test/"+file+"_marked_"+word_dic+" > ../DATA_test/tmp")
     os.system("mv ../DATA_test/tmp ../DATA_test/"+file+"_marked_"+word_dic)
