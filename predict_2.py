@@ -40,7 +40,7 @@ def predict_on_file(sess,file,word_dic):
 
 data_flag='all'
 
-CHECKPOINT_PATH='../MODEL/LR_0.2-cate_mlut-data_'+data_flag+'-normal_True-prewordembedding_False-score_style_mine-seg_nio-weight_True_ckpt'
+CHECKPOINT_PATH='../MODEL/LR_1-attflag_True-cate_mlut-data_'+data_flag+'-normal_True-prewordembedding_False-score_style_mine-seg_jieba-weight_True_ckpt'
 
 # print(resolve_filename(CHECKPOINT_PATH))
 config=resolve_filename(CHECKPOINT_PATH)

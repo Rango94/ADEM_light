@@ -39,7 +39,7 @@ def Rename(config_old,config_new):
 
 config={'score_style':'mine',
                 'normal':True,
-                'LR':0.2,
+                'LR':1,
                 'cate':'mlut',
                 'weight':True,
                 'data':'all',

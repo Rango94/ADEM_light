@@ -67,12 +67,8 @@ class ADEM_model(object):
                 [tf.nn.rnn_cell.BasicLSTMCell(self.HIDDEN_SIZE) for _ in range(self.NUM_LAYERS)])
 
             with tf.variable_scope('attention'):
-                self.E = tf.constant(math.e, name='E')
                 self.attention_weight = tf.get_variable(name='att_weight', shape=[self.HIDDEN_SIZE * self.NUM_LAYERS,
                                                                                   self.HIDDEN_SIZE * self.NUM_LAYERS])
-                self.att_context = tf.get_variable(name='att_context', shape=[1,self.HIDDEN_SIZE * self.NUM_LAYERS])
-                self.att_model_res = tf.get_variable(name='model_res', shape=[1,self.HIDDEN_SIZE * self.NUM_LAYERS])
-                self.att_refrence_res = tf.get_variable(name='refrence_res', shape=[1,self.HIDDEN_SIZE * self.NUM_LAYERS])
 
             with tf.variable_scope('output_layer'):
                 self.w1 = tf.get_variable(name='w1', shape=[self.HIDDEN_SIZE * 3 * self.NUM_LAYERS, 256])
@@ -132,9 +128,9 @@ class ADEM_model(object):
         with tf.variable_scope('handle_output'):
 
             if self.attention_flag:
-                context_state_h = self.attetion(self.att_context,context_output,context_size)
-                model_state_h = self.attetion(self.att_model_res,model_output,model_response_size)
-                refrence_state_h = self.attetion(self.att_refrence_res,refrence_output,refrence_response_size)
+                context_state_h = self.get_h(context_state)
+                model_state_h = self.attetion(context_state_h,model_output,model_response_size)
+                refrence_state_h = self.attetion(context_state_h,refrence_output,refrence_response_size)
             else:
                 context_state_h=self.get_h(context_state)
                 model_state_h=self.get_h(model_state)
@@ -208,42 +204,31 @@ class ADEM_model(object):
     '''
     采用的相似度计算方法：
     a=z0*M*h
-    
     '''
+    #
+    def attetion(self, context_state, outputs, length):
 
-    # tmp = tf.matmul(att_, self.attention_weight)
-    #
-    # tmp = tf.matmul(tf.reshape(state, shape=[-1, self.HIDDEN_SIZE]), tf.reshape(tmp, shape=[self.HIDDEN_SIZE, 1]))
-    #
-    # tmp = tf.reshape(tmp, [-1, 18])
-    #
-    # tmp = tmp * self.genarate_mask(length, 18)
-    #
-    # tmp = tf.nn.softmax(tmp)
-    #
-    # tmp = tf.matmul(tf.reshape(tmp, shape=[-1, 1, 18]), state)
-
-
-    def attetion(self,att_,state,length):
+        # tmp = tf.matmul(context_state, self.attention_weight)
+        #
+        # tmp = tf.matmul(outputs, tf.reshape(tmp, shape=[-1, self.HIDDEN_SIZE, 1]))
+        #
+        # tmp = tf.reshape(tmp, [-1, 18])
+        #
+        # tmp = tmp * tf.sequence_mask(length, self.max_len, dtype=tf.float32)
+        #
+        # tmp = tf.nn.softmax(tmp)
+        #
+        # tmp = tf.matmul(tf.reshape(tmp, shape=[-1, 1, 18]), outputs)
         return tf.reshape(
             tf.matmul(
-            tf.reshape(
-            tf.nn.softmax(
-            tf.reshape(
-            tf.matmul(
-            tf.reshape(
-            state, shape=[-1, self.HIDDEN_SIZE]),
-            tf.reshape(
-            tf.matmul(
-            att_, self.attention_weight), shape=[self.HIDDEN_SIZE, 1])), [-1, self.max_len]) *
-            tf.sequence_mask(
-            length, self.max_len, dtype=tf.float32)), shape=[-1, 1, self.max_len]), state),shape=[-1,self.HIDDEN_SIZE])
-
-
-
-    def genarate_mask(self,length,max_len):
-        return
-
+                tf.reshape(
+                    tf.nn.softmax(
+                        tf.reshape(
+                            tf.matmul(
+                                outputs,tf.reshape(
+                                    tf.matmul(
+                                        context_state, self.attention_weight), shape=[-1, self.HIDDEN_SIZE, 1])), [-1, 18]) * tf.sequence_mask(
+                            length, self.max_len, dtype=tf.float32)), shape=[-1, 1, 18]), outputs),shape=[-1, self.HIDDEN_SIZE])
 
 
     def matrix_l1_norm(self,matrix):
