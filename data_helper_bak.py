@@ -17,9 +17,36 @@ class data_helper:
     def __init__(self, config ,train_file='', val_file='',test_file=''):
 
         cate=config['cate']
-        self.weight=config['weight']
+        weight=config['weight']
         data_flag=config['data']
         dic_file=config['seg']
+
+        self.train_file_list=['../DATA_8/corpus_normal_random_train_idx',
+                         '../DATA_9/corpus_normal_random_train_idx',
+                         '../DATA_orgin/corpus_normal_random_train_idx',]
+
+        self.val_file_list = ['../DATA_8/corpus_normal_random_val_idx',
+                           '../DATA_9/corpus_normal_random_val_idx',
+                           '../DATA_orgin/corpus_normal_random_val_idx',]
+
+        self.test_file_list = ['../DATA_8/corpus_normal_random_test_idx',
+                         '../DATA_9/corpus_normal_random_test_idx',
+                         '../DATA_orgin/corpus_normal_random_test_idx',]
+
+        if config['seg']=='nio':
+            self.train_file_list=[filename+'_nioseg' for filename in self.train_file_list]
+            self.test_file_list = [filename + '_nioseg' for filename in self.test_file_list]
+            self.val_file_list = [filename + '_nioseg' for filename in self.val_file_list]
+
+        if config['seg']=='ipx':
+            self.train_file_list = [filename + '_ipx' for filename in self.train_file_list]
+            self.test_file_list = [filename + '_ipx' for filename in self.test_file_list]
+            self.val_file_list = [filename + '_ipx' for filename in self.val_file_list]
+
+        try:
+            self.train_fo_list=[codecs.open(filename,'r','utf-8') for filename in self.train_file_list]
+        except:
+            pass
 
         if data_flag=='8':
             self.data_pre='../DATA_8/'
@@ -28,12 +55,20 @@ class data_helper:
         elif data_flag=='orgin':
             self.data_pre = '../DATA_orgin/'
         elif data_flag=='all':
-            self.data_pre='../DATA/'
+            self.data_pre='all'
+        else:
+            self.data_pre = '../DATA_total/'
 
+        self.train_cont=rd.randint(0,2)
+        self.test_cont = 0
+        self.val_cont = 0
+
+        self.test_idx=0
         if dic_file=='ipx':
             self.max_len=30
         else:
             self.max_len=18
+        self.weight=weight
 
         if cate=='two':
             self.cateflag=True
@@ -51,34 +86,83 @@ class data_helper:
 
 
         if train_file=='':
-            self.TRAIN_FILE = self.data_pre+'corpus_normal_random_train_idx_'+dic_file
+            self.TRAIN_FILE = self.data_pre+'corpus_normal_random_train_idx'
         else:
             self.TRAIN_FILE = train_file
 
         if val_file=='':
-            self.VAL_FILE = self.data_pre+'corpus_normal_random_val_idx_'+dic_file
+            self.VAL_FILE = self.data_pre+'corpus_normal_random_val_idx'
         else:
             self.VAL_FILE=val_file
 
         if test_file=='':
-            self.TEST_FILE = self.data_pre+'corpus_normal_random_test_idx_'+dic_file
+            self.TEST_FILE = self.data_pre+'corpus_normal_random_test_idx'
         else:
             self.TEST_FILE =test_file
 
-        self.corpus_train = codecs.open(self.TRAIN_FILE, 'r', 'utf-8')
-        self.corpus_val = codecs.open(self.VAL_FILE, 'r', 'utf-8')
-        self.corpus_test = codecs.open(self.TEST_FILE, 'r', 'utf-8')
+        self.cont_dic_8 = {0: 142121, 1: 33358, 2: 67408, 3: 107272, 4: 12162}
+        for key in self.cont_dic_8:
+            self.cont_dic_8[key] = math.pow(float(12162) / float(self.cont_dic_8[key]), 0.5)
 
-        self.cont_dic = {0: 221604, 1: 54029, 2: 245302, 3: 245664, 4: 56014}
+        self.cont_dic_9 = {0: 65763, 1: 15531, 2: 46452, 3: 49359, 4: 11183}
+        for key in self.cont_dic_9:
+            self.cont_dic_9[key] = math.pow(float(11183) / float(self.cont_dic_9[key]),0.5)
 
-        for key in self.cont_dic:
-            self.cont_dic[key] = math.pow(float(54029) / float(self.cont_dic[key]), 0.5)
+        self.cont_dic_orgin = {0: 36322, 1: 10477, 2: 21376, 3: 110334, 4: 36847}
+        for key in self.cont_dic_orgin:
+            self.cont_dic_orgin[key] = math.pow(float(10477) / float(self.cont_dic_orgin[key]),0.5)
+
+        self.weight_dic={0:self.cont_dic_8,1:self.cont_dic_9,2:self.cont_dic_orgin}
 
         self.builddic()
         self.word_dic=json.load(codecs.open(self.DIC_FILE,'r','utf-8'))
-        self.vocab_size = len(self.word_dic)
+        if data_flag!='all':
+            self.corpus_train=codecs.open(self.TRAIN_FILE, 'r','utf-8')
+            self.corpus_val=codecs.open(self.VAL_FILE, 'r', 'utf-8')
+            self.corpus_test = codecs.open(self.TEST_FILE, 'r', 'utf-8')
+        else:
+            try:
+                self.change('val')
+                self.change('test')
+            except:
+                pass
+
+        self.vocab_size=len(self.word_dic)
 
 
+    def change(self,file_flag):
+        if self.data_pre=='all':
+            if file_flag=='train':
+                self.TRAIN_FILE=self.train_file_list[self.train_cont % len(self.train_file_list)]
+                self.corpus_train = codecs.open(self.TRAIN_FILE, 'r', 'utf-8')
+                self.train_cont+=1
+                return True
+
+            if file_flag=='test':
+                if self.test_cont<len(self.test_file_list):
+                    self.TEST_FILE = self.test_file_list[self.test_cont % len(self.test_file_list)]
+                    self.corpus_test = codecs.open(self.TEST_FILE, 'r', 'utf-8')
+                    self.test_cont+=1
+                    return True
+                else:
+                    self.test_cont=0
+                    self.TEST_FILE = self.test_file_list[self.test_cont % len(self.test_file_list)]
+                    self.test_cont +=1
+                    self.corpus_test = codecs.open(self.TEST_FILE, 'r', 'utf-8')
+                    return False
+
+            if file_flag=='val':
+                if self.val_cont<len(self.val_file_list):
+                    self.VAL_FILE = self.val_file_list[self.val_cont % len(self.val_file_list)]
+                    self.corpus_val = codecs.open(self.VAL_FILE, 'r', 'utf-8')
+                    self.val_cont+=1
+                    return True
+                else:
+                    self.val_cont=0
+                    self.VAL_FILE = self.val_file_list[self.val_cont % len(self.val_file_list)]
+                    self.val_cont+=1
+                    self.corpus_val = codecs.open(self.VAL_FILE, 'r', 'utf-8')
+                    return False
 
     def generate_negative_sample(self):
         context, true_response, model_response=[[self.get_random() for i in range(rd.randint(1, self.max_len))] for _ in range(3)]
@@ -95,10 +179,16 @@ class data_helper:
 
     def generate_negative_sample_seq(self):
         while True:
+            self.train_cont = rd.randint(0, 2)
+            self.TRAIN_FILE = self.train_file_list[self.train_cont]
+            self.corpus_train = self.train_fo_list[self.train_cont]
             line = self.corpus_train.readline()
+
             if line == '':
                 self.corpus_train.close()
-                self.corpus_train=codecs.open(self.TRAIN_FILE, 'r', 'utf-8')
+                self.corpus_train = codecs.open(self.train_file_list[self.train_cont], 'r', 'utf-8')
+                self.train_fo_list[self.train_cont] = self.corpus_train
+                self.TRAIN_FILE = self.train_file_list[self.train_cont]
                 line = self.corpus_train.readline()
             line = line.strip().split('\t')
             if line[3] != '0' and line[3] != '1' and line[3] != '2' and line[3] != '3' and line[3] != '4':
@@ -108,10 +198,16 @@ class data_helper:
                 break
 
         while True:
+            self.train_cont = rd.randint(0, 2)
+            self.TRAIN_FILE = self.train_file_list[self.train_cont]
+            self.corpus_train = self.train_fo_list[self.train_cont]
             line = self.corpus_train.readline()
+
             if line == '':
                 self.corpus_train.close()
-                self.corpus_train = codecs.open(self.TRAIN_FILE, 'r', 'utf-8')
+                self.corpus_train = codecs.open(self.train_file_list[self.train_cont], 'r', 'utf-8')
+                self.train_fo_list[self.train_cont] = self.corpus_train
+                self.TRAIN_FILE = self.train_file_list[self.train_cont]
                 line = self.corpus_train.readline()
             line = line.strip().split('\t')
             if line[3] != '0' and line[3] != '1' and line[3] != '2' and line[3] != '3' and line[3] != '4':
@@ -121,10 +217,16 @@ class data_helper:
                 break
 
         while True:
+            self.train_cont = rd.randint(0, 2)
+            self.TRAIN_FILE = self.train_file_list[self.train_cont]
+            self.corpus_train = self.train_fo_list[self.train_cont]
             line = self.corpus_train.readline()
+
             if line == '':
                 self.corpus_train.close()
-                self.corpus_train = codecs.open(self.TRAIN_FILE, 'r', 'utf-8')
+                self.corpus_train = codecs.open(self.train_file_list[self.train_cont], 'r', 'utf-8')
+                self.train_fo_list[self.train_cont] = self.corpus_train
+                self.TRAIN_FILE = self.train_file_list[self.train_cont]
                 line = self.corpus_train.readline()
             line = line.strip().split('\t')
             if line[3] != '0' and line[3] != '1' and line[3] != '2' and line[3] != '3' and line[3] != '4':
@@ -150,10 +252,16 @@ class data_helper:
                 continue
             if rd.random()<0.9:
                 if rd.random()<0.9:
+                    self.train_cont=rd.randint(0,2)
+                    self.TRAIN_FILE = self.train_file_list[self.train_cont]
+                    self.corpus_train = self.train_fo_list[self.train_cont]
                     line=self.corpus_train.readline()
+
                     if line=='':
                         self.corpus_train.close()
-                        self.corpus_train=codecs.open(self.TRAIN_FILE, 'r', 'utf-8')
+                        self.corpus_train=codecs.open(self.train_file_list[self.train_cont],'r','utf-8')
+                        self.train_fo_list[self.train_cont] = self.corpus_train
+                        self.TRAIN_FILE=self.train_file_list[self.train_cont]
                         line=self.corpus_train.readline()
 
                     line=line.strip().split('\t')
@@ -164,13 +272,14 @@ class data_helper:
                     true_response_tmp = [int(i) for i in line[1].split(' ')]
                     model_response_tmp = [int(i) for i in line[2].split(' ')]
 
+                    # human_score.append(int(line[3]))
                     if self.cateflag:
                         human_score.append(0 if int(line[3]) <= 2 else 1)
                     else:
                         human_score.append(int(line[3]))
 
                     if self.weight:
-                        grads_wt.append(self.cont_dic[int(line[3])])
+                        grads_wt.append(self.weight_dic[(self.train_cont - 1) % 3][int(line[3])])
                     else:
                         grads_wt.append(1)
                 else:
@@ -184,9 +293,14 @@ class data_helper:
                 human_score.append(human_score_)
                 grads_wt.append(grads_wt_)
 
-            context_mask.append(min(self.max_len, len(context_tmp)))
-            true_response_mask.append(min(self.max_len, len(true_response_tmp)))
-            model_response_mask.append(min(self.max_len, len(model_response_tmp)))
+            if self.test_idx != 0:
+                context_mask.append(self.test_idx)
+                true_response_mask.append(self.test_idx)
+                model_response_mask.append(self.test_idx)
+            else:
+                context_mask.append(min(self.max_len, len(context_tmp)))
+                true_response_mask.append(min(self.max_len, len(true_response_tmp)))
+                model_response_mask.append(min(self.max_len, len(model_response_tmp)))
 
             while len(context_tmp)<self.max_len:
                 context_tmp.append(0)
@@ -227,10 +341,14 @@ class data_helper:
         true_response_tmp = [self.word_dic[i] for i in line[1].split(' ')]
         model_response_tmp = [self.word_dic[i] for i in line[2].split(' ')]
 
-
-        context_mask.append(min(self.max_len, len(context_tmp)))
-        true_response_mask.append(min(self.max_len, len(true_response_tmp)))
-        model_response_mask.append(min(self.max_len, len(model_response_tmp)))
+        if self.test_idx != 0:
+            context_mask.append(self.test_idx)
+            true_response_mask.append(self.test_idx)
+            model_response_mask.append(self.test_idx)
+        else:
+            context_mask.append(min(self.max_len, len(context_tmp)))
+            true_response_mask.append(min(self.max_len, len(true_response_tmp)))
+            model_response_mask.append(min(self.max_len, len(model_response_tmp)))
 
         while len(context_tmp) < self.max_len:
             context_tmp.append(0)
@@ -262,8 +380,13 @@ class data_helper:
         grads_wt = []
         while True:
             line = self.corpus_test.readline()
-            if line=='':
-                break
+
+            if line == '' :
+                if not self.change('test'):
+                    break
+                else:
+                    continue
+
             line = line.strip().split('\t')
             if line[3] != '0' and line[3] != '1' and line[3] != '2' and line[3] != '3' and line[3] != '4':
                 continue
@@ -272,10 +395,14 @@ class data_helper:
             true_response_tmp = [int(i) for i in line[1].split(' ')]
             model_response_tmp = [int(i) for i in line[2].split(' ')]
 
-
-            context_mask.append(min(self.max_len,len(context_tmp)))
-            true_response_mask.append(min(self.max_len,len(true_response_tmp)))
-            model_response_mask.append(min(self.max_len,len(model_response_tmp)))
+            if self.test_idx!=0:
+                context_mask.append(self.test_idx)
+                true_response_mask.append(self.test_idx)
+                model_response_mask.append(self.test_idx)
+            else:
+                context_mask.append(min(self.max_len,len(context_tmp)))
+                true_response_mask.append(min(self.max_len,len(true_response_tmp)))
+                model_response_mask.append(min(self.max_len,len(model_response_tmp)))
 
             # human_score.append(int(line[3]))
             if self.cateflag:
@@ -319,7 +446,10 @@ class data_helper:
             if rd.random()<0.8:
                 line = self.corpus_val.readline()
                 if line == '' :
-                    break
+                    if not self.change('val'):
+                        break
+                    else:
+                        continue
                 line = line.strip().split('\t')
 
                 if line[3] != '0' and line[3] != '1' and line[3] != '2' and line[3] != '3' and line[3]!='4':
@@ -342,9 +472,14 @@ class data_helper:
                 human_score.append(human_score_)
                 grads_wt.append(grads_wt_)
 
-            context_mask.append(min(self.max_len, len(context_tmp)))
-            true_response_mask.append(min(self.max_len, len(true_response_tmp)))
-            model_response_mask.append(min(self.max_len, len(model_response_tmp)))
+            if self.test_idx != 0:
+                context_mask.append(self.test_idx)
+                true_response_mask.append(self.test_idx)
+                model_response_mask.append(self.test_idx)
+            else:
+                context_mask.append(min(self.max_len, len(context_tmp)))
+                true_response_mask.append(min(self.max_len, len(true_response_tmp)))
+                model_response_mask.append(min(self.max_len, len(model_response_tmp)))
 
             while len(context_tmp) < self.max_len:
                 context_tmp.append(0)
@@ -381,11 +516,18 @@ class data_helper:
         while size > 0:
             if rd1>rd.random():
                 continue
+
+            self.train_cont = rd.randint(0, 2)
+            self.TRAIN_FILE = self.train_file_list[self.train_cont]
+            self.corpus_train = self.train_fo_list[self.train_cont]
             line = self.corpus_train.readline()
 
             if line == '':
                 self.corpus_train.close()
-                self.corpus_train=codecs.open(self.TRAIN_FILE, 'r', 'utf-8')
+                self.train_fo_list[self.train_cont] = codecs.open(self.train_file_list[self.train_cont],
+                                                                  'r', 'utf-8')
+                self.TRAIN_FILE = self.train_file_list[self.train_cont]
+                self.corpus_train = self.train_fo_list[self.train_cont]
                 line = self.corpus_train.readline()
 
             line = line.strip().split('\t')
@@ -396,10 +538,14 @@ class data_helper:
             true_response_tmp = [int(i) for i in line[1].split(' ')]
             model_response_tmp = [int(i) for i in line[2].split(' ')]
 
-
-            context_mask.append(min(self.max_len,len(context_tmp)))
-            true_response_mask.append(min(self.max_len,len(true_response_tmp)))
-            model_response_mask.append(min(self.max_len,len(model_response_tmp)))
+            if self.test_idx!=0:
+                context_mask.append(self.test_idx)
+                true_response_mask.append(self.test_idx)
+                model_response_mask.append(self.test_idx)
+            else:
+                context_mask.append(min(self.max_len,len(context_tmp)))
+                true_response_mask.append(min(self.max_len,len(true_response_tmp)))
+                model_response_mask.append(min(self.max_len,len(model_response_tmp)))
 
             # human_score.append(int(line[3]))
 
@@ -452,9 +598,14 @@ class data_helper:
             true_response_tmp = [int(i) for i in line[1].split(' ')]
             model_response_tmp = [int(i) for i in line[2].split(' ')]
 
-            context_mask.append(min(self.max_len, len(context_tmp)))
-            true_response_mask.append(min(self.max_len, len(true_response_tmp)))
-            model_response_mask.append(min(self.max_len, len(model_response_tmp)))
+            if self.test_idx != 0:
+                context_mask.append(self.test_idx)
+                true_response_mask.append(self.test_idx)
+                model_response_mask.append(self.test_idx)
+            else:
+                context_mask.append(min(self.max_len, len(context_tmp)))
+                true_response_mask.append(min(self.max_len, len(true_response_tmp)))
+                model_response_mask.append(min(self.max_len, len(model_response_tmp)))
 
             while len(context_tmp) < self.max_len:
                 context_tmp.append(0)
@@ -473,6 +624,8 @@ class data_helper:
             true_response.append(np.array(true_response_tmp))
             model_response.append(np.array(model_response_tmp))
         corpus_specific.close()
+        corpus_specific = codecs.open(file, 'r', 'utf-8')
+
         return np.array(context), np.array(true_response), np.array(model_response), np.array(context_mask), np.array(
             true_response_mask), np.array(model_response_mask)
 

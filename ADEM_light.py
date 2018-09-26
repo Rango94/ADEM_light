@@ -17,7 +17,6 @@ import codecs
 class ADEM_model(object):
 
     def __init__(self, config, config_network):
-
         self.config=config
         self.config_network=config_network
         self.HIDDEN_SIZE=config_network['HIDDEN_SIZE']
@@ -29,13 +28,31 @@ class ADEM_model(object):
         self.MAX_GRAD_NORM=config_network['MAX_GRAD_NORM']
         self.attention_flag=config['attflag']
         self.max_len=18
+        self.normal=config['normal']
+
         self.build_graph()
 
-    def build_graph(self):
 
+    def build_graph(self):
+        self.build_placeholder()
+        self.build_variable()
+        self.forward()
+
+        if self.config['score_style']=='mine':
+            self.compute_score_mine()
+        elif self.config['score_style']=='adem':
+            self.compute_score_adem()
+        else:
+            print('flag error')
+            return 0
+
+        self.compute_loss()
+        self._train()
+
+    def build_placeholder(self):
         self.context_input = tf.placeholder(dtype=tf.int32, shape=[None, None], name='context_input')
-        self.model_input = tf.placeholder(dtype=tf.int32, shape=[None, None], name='context_input')
-        self.refrence_input = tf.placeholder(dtype=tf.int32, shape=[None, None], name='context_input')
+        self.model_response_input = tf.placeholder(dtype=tf.int32, shape=[None, None], name='context_input')
+        self.refrence_response_input = tf.placeholder(dtype=tf.int32, shape=[None, None], name='context_input')
 
         self.context_sequence_length = tf.placeholder(dtype=tf.int32, shape=[None], name='context_sequence_length')
         self.model_sequence_length = tf.placeholder(dtype=tf.int32, shape=[None], name='context_sequence_length')
@@ -44,6 +61,8 @@ class ADEM_model(object):
         self.grad_ys = tf.placeholder(dtype=tf.float32, shape=[None], name='grad_ys')
         self.human_score = tf.placeholder(dtype=tf.float32, shape=[None], name='human_score')
 
+
+    def build_variable(self):
         initializer = tf.random_uniform_initializer(-0.5, 0.5)
         with tf.variable_scope('nmt_model', reuse=None, initializer=initializer):
             if not self.config['prewordembedding']:
@@ -60,8 +79,6 @@ class ADEM_model(object):
 
             self.context_cell = tf.nn.rnn_cell.MultiRNNCell(
                 [tf.nn.rnn_cell.BasicLSTMCell(self.HIDDEN_SIZE) for _ in range(self.NUM_LAYERS)])
-
-
             self.model_cell = tf.nn.rnn_cell.MultiRNNCell(
                 [tf.nn.rnn_cell.BasicLSTMCell(self.HIDDEN_SIZE) for _ in range(self.NUM_LAYERS)])
             self.refrence_cell = tf.nn.rnn_cell.MultiRNNCell(
@@ -88,102 +105,87 @@ class ADEM_model(object):
                 self.Beta = tf.Variable(
                     name='beta', initial_value=tf.random_uniform([1], maxval=5.0))
 
-        context_state_h, model_state_h, refrence_state_h=self.forward(self.context_input, self.context_sequence_length, self.model_input,
-                self.model_sequence_length,self.refrence_input,
-                self.refrence_sequence_length)
 
-        if self.config['score_style']=='mine':
-            self.model_score=self.compute_score_mine(context_state_h, model_state_h, refrence_state_h)
-        elif self.config['score_style']=='adem':
-            self.model_score = self.compute_score_adem(context_state_h, model_state_h, refrence_state_h)
-        else:
-            print('flag error')
-            return 0
+    def forward(self):
 
-        self.loss=self.compute_loss(self.model_score,self.human_score,self.grad_ys,self.config['normal'])
-
-        self.train_op=self._train(self.loss)
-
-
-    def forward(self, context_input, context_size, model_response_input,
-                model_response_size,refrence_response_input,
-                refrence_response_size):
-
-        context_emb=tf.nn.embedding_lookup(self.embedding, context_input)
-        model_response_emb=tf.nn.embedding_lookup(self.embedding, model_response_input)
-        refrence_response_emb = tf.nn.embedding_lookup(self.embedding, refrence_response_input)
+        context_emb=tf.nn.embedding_lookup(self.embedding, self.context_input)
+        model_response_emb=tf.nn.embedding_lookup(self.embedding, self.model_response_input)
+        refrence_response_emb = tf.nn.embedding_lookup(self.embedding, self.refrence_response_input)
 
         context_emb=tf.nn.dropout(context_emb,self.KEEP_PROB)
         model_response_emb=tf.nn.dropout(model_response_emb,self.KEEP_PROB)
         refrence_response_emb=tf.nn.dropout(refrence_response_emb,self.KEEP_PROB)
 
         with tf.variable_scope('context_encoder'):
-            context_output,context_state=tf.nn.dynamic_rnn(self.context_cell, context_emb, sequence_length=context_size, dtype=tf.float32)
+            context_output,context_state=tf.nn.dynamic_rnn(self.context_cell, context_emb, sequence_length=self.context_sequence_length, dtype=tf.float32)
 
         with tf.variable_scope('model_encoder'):
-            model_output,model_state=tf.nn.dynamic_rnn(self.model_cell, model_response_emb, sequence_length=model_response_size, dtype=tf.float32)
+            model_output,model_state=tf.nn.dynamic_rnn(self.model_cell, model_response_emb, sequence_length=self.model_sequence_length, dtype=tf.float32)
 
         with tf.variable_scope('refrence_encoder'):
-            refrence_output,refrence_state = tf.nn.dynamic_rnn(self.refrence_cell, refrence_response_emb, sequence_length=refrence_response_size,dtype=tf.float32)
+            refrence_output,refrence_state = tf.nn.dynamic_rnn(self.refrence_cell, refrence_response_emb, sequence_length=self.refrence_sequence_length,dtype=tf.float32)
 
         with tf.variable_scope('handle_output'):
 
             if self.attention_flag:
-                context_state_h = self.get_h(context_state)
-                model_state_h = self.attetion(context_state_h,model_output,model_response_size)
-                refrence_state_h = self.attetion(context_state_h,refrence_output,refrence_response_size)
+                self.context_state_h = self.get_h(context_state)
+                self.model_state_h = self.attetion(self.context_state_h,model_output,self.model_sequence_length)
+                self.refrence_state_h = self.attetion(self.context_state_h,refrence_output,self.refrence_sequence_length)
             else:
-                context_state_h=self.get_h(context_state)
-                model_state_h=self.get_h(model_state)
-                refrence_state_h=self.get_h(refrence_state)
+                self.context_state_h=self.get_h(context_state)
+                self.model_state_h=self.get_h(model_state)
+                self.refrence_state_h=self.get_h(refrence_state)
 
-        return context_state_h,model_state_h,refrence_state_h
+    def compute_score_mine(self):
+        reshaped = tf.concat([self.context_state_h, self.model_state_h], 1)
+        reshaped = tf.concat([reshaped, self.refrence_state_h], 1)
+        a=tf.nn.relu(tf.matmul(reshaped,self.w1))+self.bais1
+        b=tf.nn.relu(tf.matmul(a,self.w2))+self.bais2
+        self.model_score=tf.matmul(b,self.w3)
 
+    def compute_score_adem(self):
+        self.model_score = (tf.reduce_sum((self.context_state_h * tf.matmul(self.model_state_h, self.M)), axis=1) +
+                 tf.reduce_sum((self.refrence_state_h * tf.matmul(self.model_state_h, self.N)), axis=1) -
+                 self.Alpha) / self.Beta
 
-    def compute_loss(self, model_score,human_score, grad_ys,normal):
-
-        human_score = tf.reshape(human_score, shape=[-1, 1])
-        model_score = tf.reshape(model_score, shape=[-1, 1])
-        grad_ys = tf.reshape(grad_ys, shape=[-1, 1])
-
+    def compute_loss(self):
+        human_score = tf.reshape(self.human_score, shape=[-1, 1])
+        model_score = tf.reshape(self.model_score, shape=[-1, 1])
+        grad_ys = tf.reshape(self.grad_ys, shape=[-1, 1])
         [human_score, model_score] = self.cast_to_float32([human_score, model_score])
 
-        if normal:
+        if self.normal:
             if self.config['score_style']=='adem':
                 regularization = self.matrix_l1_norm(self.M) + self.matrix_l1_norm(self.N)
                 gamma = tf.constant(0.15, name='gamma')
-                loss = tf.reduce_sum(tf.square(human_score - model_score) * grad_ys) + (gamma * regularization)
+                self.loss = tf.reduce_sum(tf.square(human_score - model_score) * grad_ys) + (gamma * regularization)
             elif self.config['score_style']=='mine':
                 regularization = self.matrix_l1_norm(self.w1) + self.matrix_l1_norm(self.w2)
                 gamma = tf.constant(0.15, name='gamma')
-                loss = tf.reduce_sum(tf.square(human_score - model_score) * grad_ys) + (gamma * regularization)
+                self.loss = tf.reduce_sum(tf.square(human_score - model_score) * grad_ys) + (gamma * regularization)
             else:
-                loss = tf.reduce_sum(tf.square(human_score - model_score) * grad_ys)
+                self.loss = tf.reduce_sum(tf.square(human_score - model_score) * grad_ys)
         else:
-            loss = tf.reduce_sum(tf.square(human_score - model_score) * grad_ys)
-        return loss
+            self.loss = tf.reduce_sum(tf.square(human_score - model_score) * grad_ys)
 
 
-    def _train(self,loss):
+    def _train(self):
         trainable_variables = tf.trainable_variables()
-        grads = tf.gradients(loss, trainable_variables)
+        grads = tf.gradients(self.loss, trainable_variables)
         grads, _ = tf.clip_by_global_norm(grads, self.MAX_GRAD_NORM)
         opt = tf.train.AdadeltaOptimizer(learning_rate=self.config['LR'])
-        train_op = opt.apply_gradients(zip(grads, trainable_variables))
-        return train_op
+        self.train_op = opt.apply_gradients(zip(grads, trainable_variables))
 
     def train_on_batch(self, session, step, feed_dict_):
-
         feed_dict = {self.context_input: feed_dict_['context_input'],
                      self.context_sequence_length: feed_dict_['context_sequence_length'],
-                     self.model_input: feed_dict_['model_input'],
-                     self.refrence_input: feed_dict_['refrence_input'],
+                     self.model_response_input: feed_dict_['model_input'],
+                     self.refrence_response_input: feed_dict_['refrence_input'],
                      self.model_sequence_length: feed_dict_['model_sequence_length'],
                      self.refrence_sequence_length: feed_dict_['refrence_sequence_length'],
                      self.human_score: feed_dict_['human_score'],
                      self.grad_ys: feed_dict_['grad_ys']
                      }
-
         loss, _ = session.run([self.loss, self.train_op], feed_dict=feed_dict)
         if step % 100 == 0 and step != 0:
             print('After %d steps,per token loss is %.3f' % (step, loss))
@@ -193,11 +195,10 @@ class ADEM_model(object):
     def predict_on_batch(self, session, feed_dict_):
         feed_dict = {self.context_input: feed_dict_['context_input'],
                      self.context_sequence_length: feed_dict_['context_sequence_length'],
-                     self.model_input: feed_dict_['model_input'],
-                     self.refrence_input: feed_dict_['refrence_input'],
+                     self.model_response_input: feed_dict_['model_input'],
+                     self.refrence_response_input: feed_dict_['refrence_input'],
                      self.model_sequence_length: feed_dict_['model_sequence_length'],
                      self.refrence_sequence_length: feed_dict_['refrence_sequence_length']
-                     # self.human_score: feed_dict_['human_score']
                      }
         model_score = session.run(self.model_score, feed_dict=feed_dict)
         return model_score
@@ -206,21 +207,15 @@ class ADEM_model(object):
     根据context final state分别计算其与refrence response和model response的attention，将attention的结果作为最终编码。
     采用的相似度计算方法：
     Alpha = h ✖ M ✖ context_state.T
-    '''
-    #
-    def attetion(self, context_state, outputs, length):
-
+    步骤分解如下：
         # tmp = tf.matmul(context_state, self.attention_weight)
-        #
         # tmp = tf.matmul(outputs, tf.reshape(tmp, shape=[-1, self.HIDDEN_SIZE, 1]))
-        #
         # tmp = tf.reshape(tmp, [-1, 18])
-        #
         # tmp = tmp * tf.sequence_mask(length, self.max_len, dtype=tf.float32)
-        #
         # tmp = tf.nn.softmax(tmp)
-        #
         # tmp = tf.matmul(tf.reshape(tmp, shape=[-1, 1, 18]), outputs)
+    '''
+    def attetion(self, context_state, outputs, length):
         return tf.reshape(
             tf.matmul(
                 tf.reshape(
@@ -241,30 +236,13 @@ class ADEM_model(object):
 
     def get_h(self,state):
         c,h=state[0]
-
         h=tf.reshape(h,[-1,self.HIDDEN_SIZE*self.NUM_LAYERS])
-
         return h
 
     def cast_to_float32(self,tensor_list):
         for num, tensor in enumerate(tensor_list):
             tensor_list[num] = tf.cast(tensor, tf.float32)
         return tensor_list
-
-    def compute_score_mine(self, context_state_h, model_state_h, refrence_state_h):
-        reshaped = tf.concat([context_state_h, model_state_h], 1)
-        reshaped = tf.concat([reshaped, refrence_state_h], 1)
-        a=tf.nn.relu(tf.matmul(reshaped,self.w1))+self.bais1
-        b=tf.nn.relu(tf.matmul(a,self.w2))+self.bais2
-        model_score=tf.matmul(b,self.w3)
-        return model_score
-
-
-    def compute_score_adem(self, context_state_h, model_state_h, refrence_state_h):
-        model_score = (tf.reduce_sum((context_state_h * tf.matmul(model_state_h, self.M)), axis=1) +
-                 tf.reduce_sum((refrence_state_h * tf.matmul(model_state_h, self.N)), axis=1) -
-                 self.Alpha) / self.Beta
-        return model_score
 
     def mean_square_error(self,human_score,predict_score):
         sum=0
@@ -282,21 +260,20 @@ class ADEM_model(object):
         return math.pow(sum/len(human_score),0.5)
 
 
+    #载入字典文件，输入为字典文件名。
     def set_word_dic(self,word_dic_file):
         self.word_dic = json.load(codecs.open(word_dic_file, 'r', 'utf-8'))
-
         if 'jieba' in word_dic_file:
             self.dic_flag='jieba'
         elif 'ipx' in word_dic_file:
             self.dic_flag='ipx'
         else:
             self.dic_flag='nio'
-
         print '字典载入完毕'
 
+    #输入为文字，即时给出预测值，测试用，只有jieba分词，使用之前先使用上一个方法载入字典文件
     def predict_on_line(self,sess,line):
         if len(line.split('\t'))!=3:
-
             print '格式错误'
         else:
             if self.dic_flag=='jieba':

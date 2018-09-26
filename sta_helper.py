@@ -9,32 +9,39 @@ import random as rd
 
 import matplotlib.pyplot as plt
 
-#绘制model分数和人工分数的散点图
-#1.4102444016788234
-def mean_square_error(s1,s2):
+'''
+写了一些工具函数，主要为了统计相关数据
+'''
+
+#计算均方根误差
+def RMSE(s1, s2):
     sum = 0
     for idx, score in enumerate(s1):
         sum += math.pow(score - s2[idx], 2)
     return math.pow(sum / len(s1), 0.5)
 
+#两个baseline的均方根误差，随机数和均值
 def baseline(human_score):
     human_s = human_score.copy()
     rd_=np.array([rd.randint(0,4) for i in range(len(human_s))])
     mean_=np.array([np.mean(human_s) for i in range(len(human_s))])
-    return mean_square_error(human_s,rd_),mean_square_error(human_s,mean_)
+    return RMSE(human_s, rd_), RMSE(human_s, mean_)
 
+#两个baseline的auc
 def baseline_auc(human_score):
     human_s=human_score.copy()
     rd_ = np.array([rd.random() for i in range(len(human_s))])
     mean_ = np.array([np.mean(human_s) for i in range(len(human_s))])
     return Auc(human_s,rd_),Auc(human_s,mean_)
 
+#四舍五入回归得分
 def normal_toint(predict_s,yuzhi=0.5):
     out=[]
     for i in range(len(predict_s)):
         out.append(max(min(int(predict_s[i]+1-yuzhi),4),0))
     return np.array(out)
 
+#四舍五入后的准确率
 def score_int(predict_s,human_s,yuzhi=0.5):
     predict_s, human_s = predict_s.copy(), human_s.copy()
     predict_s=normal_toint(predict_s,yuzhi=yuzhi)
@@ -44,6 +51,7 @@ def score_int(predict_s,human_s,yuzhi=0.5):
             n+=1
     return n/len(predict_s)
 
+#按pre_s从小到大排序自己以及human_s，等于sorted(zip(human_s,pre_s),key=lambda x:x[1])
 def sort(human_s,pre_s):
     if len(human_s)<=1:
         return human_s,pre_s
@@ -79,7 +87,7 @@ def sort(human_s,pre_s):
         human_s[j+1:],pre_s[j+1:]=sort(human_s[j+1:],pre_s[j+1:])
         return human_s,pre_s
 
-
+#二分类时计算auc
 def Auc(human_score,predict_score,flag=False):
     predict_s, human_s = predict_score.copy(), human_score.copy()
     predict_s,human_s=sort(predict_s, human_s)
@@ -121,6 +129,7 @@ def Auc(human_score,predict_score,flag=False):
     plt.show()
     return auc,yuzhi
 
+#对应打印模型预测和真实值
 def looup(human_score,predict_score,all=False):
     k=0
     for i,j in zip(human_score,predict_score):
@@ -130,6 +139,7 @@ def looup(human_score,predict_score,all=False):
             k+=1
         print(i,j)
 
+#画图用的，每10个点取平均值，为了刻画数据分布
 def normal(predict_s):
     i = 0
     scale = 10
@@ -139,7 +149,7 @@ def normal(predict_s):
         i += 1
     return predict_s
 
-
+#打印每一个类的recall和pre
 def recall_and_pre(human_s,predict_s,yuzhi=0.5,num=5):
     tmp=normal_toint(predict_s,yuzhi)
     out=np.zeros((num,num))
@@ -152,6 +162,7 @@ def recall_and_pre(human_s,predict_s,yuzhi=0.5,num=5):
     for idx in range(num):
         print(idx,'recall:',out[idx,idx]/np.sum(out[idx,:]),'pre:',(out[idx,idx]/np.sum(out[:,idx]))if np.sum(out[:,idx])!=0 else 0)
 
+#解析模型名字为字典文件
 def resolve_filename(filename):
     dic={}
     filename=[each.split('_') for each in filename.replace('_ckpt','').split('/')[-1].split('-')]
