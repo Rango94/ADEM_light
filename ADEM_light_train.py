@@ -69,7 +69,7 @@ def main():
             取值:True;False
             说明:是否使用attention机制
     '''
-    config = {'score_style': 'adem',
+    config = {'score_style': 'mine',
               'normal': True,
               'LR': 1,
               'cate': 'mlut',
@@ -79,21 +79,12 @@ def main():
               'prewordembedding': False,
               'attflag': True}
 
-    model_name = tostring(config)
-    CHECKPOINT_PATH = '../MODEL/' + model_name + '_ckpt'
-
-    #判断是否有同名模型存在
-    if os.path.exists(CHECKPOINT_PATH + '.index'):
-        exists_flag = True
-    else:
-        exists_flag = False
-
     dh = data_helper(config=config)
 
     #设置模型超参数，之所以要设置两个超参数是为了利用上一个超参数来命名模型
     config_network = {
-        'HIDDEN_SIZE': 256,
-        'NUM_LAYERS': 2,
+        'HIDDEN_SIZE': 128,
+        'NUM_LAYERS': 1,
         'SRC_VOCAB_SIZE': dh.vocab_size,
         'KEEP_PROB': 0.8,
         'MAX_GRAD_NORM': 5,
@@ -101,6 +92,15 @@ def main():
                                                                     'seg'] == 'jieba' else 'word_dic_nioseg_embedding.pk',
         'max_len':dh.max_len
     }
+
+    model_name = tostring(config)
+    CHECKPOINT_PATH = '../MODEL/' + model_name + '_ckpt'
+
+    # 判断是否有同名模型存在
+    if os.path.exists(CHECKPOINT_PATH + '.index'):
+        exists_flag = True
+    else:
+        exists_flag = False
 
     train_model=ADEM_model(config, config_network)
     saver=tf.train.Saver()

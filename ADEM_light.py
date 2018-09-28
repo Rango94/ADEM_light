@@ -76,7 +76,8 @@ class ADEM_model(object):
 
     def build_variable(self):
         initializer = tf.random_uniform_initializer(-0.5, 0.5)
-        with tf.variable_scope('nmt_model', reuse=None, initializer=initializer):
+        #一个小bug，暂时修复不了，如果需要载入目前 MODEL 文件夹下的模型（也就是我训练的那个），需要把下一行代码中的 ADEM_model 改为 nmt_model
+        with tf.variable_scope('ADEM_model', reuse=None, initializer=initializer):
             if not self.config['prewordembedding']:
                 self.embedding = tf.get_variable('emb', [self.SRC_VOCAB_SIZE, self.HIDDEN_SIZE])
             else:
