@@ -3,9 +3,7 @@
 # @File  : ADEM_light.py
 # @Author: nanzhi.wang
 # @Date  : 2018/9/17
-'''
-policy grad
-'''
+
 import tensorflow as tf
 import math
 import numpy as np
@@ -13,6 +11,22 @@ import cPickle
 import jieba as jb
 import json
 import codecs
+
+'''
+本模型是论文 http://cn.arxiv.org/pdf/1708.07149 的一个简单实现
+简化了原模型对context编码的过程，因为原模型面向的是对轮对话，使用了两个不同级别的lstm网络对context编码。而我们的场景是单轮，所以省略了一个lstm网络。
+
+改变了模型结构，原有模型在lstm编码过程没有使用attention机制。
+本模型中加入了一种attention机制 (refrence:http://speech.ee.ntu.edu.tw/~tlkagk/courses/MLDS_2015_2/Lecture/Attain%20(v3).pdf),
+使用context的编码结果 分别计算其与 refrence response 和 model response 的 attention，将attention的结果作为最终编码。
+采用的相似度计算方法：
+
+Alpha_t = h_t ✖ M ✖ context_state.T
+
+改变了模型的输出层，原有的输出层是基于矩阵变换的相似度计算，本模型加入了一种拼接的方法，及将三个编码结果首尾拼接后通过两个全连接层做回归预测。
+
+'''
+
 
 class ADEM_model(object):
 
@@ -22,12 +36,10 @@ class ADEM_model(object):
         self.HIDDEN_SIZE=config_network['HIDDEN_SIZE']
         self.NUM_LAYERS=config_network['NUM_LAYERS']
         self.SRC_VOCAB_SIZE=config_network['SRC_VOCAB_SIZE']
-        self.BARCH_SIZE=config_network['BARCH_SIZE']
-        self.NUM_EPOCH=config_network['NUM_EPOCH']
         self.KEEP_PROB=config_network['KEEP_PROB']
         self.MAX_GRAD_NORM=config_network['MAX_GRAD_NORM']
         self.attention_flag=config['attflag']
-        self.max_len=18
+        self.max_len=config_network['max_len']
         self.normal=config['normal']
 
         self.build_graph()
@@ -85,11 +97,11 @@ class ADEM_model(object):
                 [tf.nn.rnn_cell.BasicLSTMCell(self.HIDDEN_SIZE) for _ in range(self.NUM_LAYERS)])
 
             with tf.variable_scope('attention'):
-                self.attention_weight = tf.get_variable(name='att_weight', shape=[self.HIDDEN_SIZE * self.NUM_LAYERS,
-                                                                                  self.HIDDEN_SIZE * self.NUM_LAYERS])
+                self.attention_weight = tf.get_variable(name='att_weight', shape=[self.HIDDEN_SIZE,
+                                                                                  self.HIDDEN_SIZE])
 
             with tf.variable_scope('output_layer'):
-                self.w1 = tf.get_variable(name='w1', shape=[self.HIDDEN_SIZE * 3 * self.NUM_LAYERS, 256])
+                self.w1 = tf.get_variable(name='w1', shape=[self.HIDDEN_SIZE * 3, 256])
                 self.bais1 = tf.get_variable(name='bais1', shape=[1, 256])
                 self.w2 = tf.get_variable(name='w2', shape=[256, 256])
                 self.bais2 = tf.get_variable(name='bais2', shape=[1, 256])
@@ -97,15 +109,15 @@ class ADEM_model(object):
                 self.bais3 = tf.get_variable(name='bais3', shape=[1])
 
                 self.N = tf.Variable(name='n', initial_value=tf.random_normal(
-                    shape=[self.HIDDEN_SIZE * self.NUM_LAYERS, self.HIDDEN_SIZE * self.NUM_LAYERS]))
+                    shape=[self.HIDDEN_SIZE , self.HIDDEN_SIZE]))
                 self.M = tf.Variable(name='m', initial_value=tf.random_normal(
-                    shape=[self.HIDDEN_SIZE * self.NUM_LAYERS, self.HIDDEN_SIZE * self.NUM_LAYERS]))
+                    shape=[self.HIDDEN_SIZE , self.HIDDEN_SIZE]))
                 self.Alpha = tf.Variable(
                     name='alpha', initial_value=tf.random_uniform([1], maxval=5.0))
                 self.Beta = tf.Variable(
                     name='beta', initial_value=tf.random_uniform([1], maxval=5.0))
 
-
+    #前向计算
     def forward(self):
 
         context_emb=tf.nn.embedding_lookup(self.embedding, self.context_input)
@@ -136,6 +148,7 @@ class ADEM_model(object):
                 self.model_state_h=self.get_h(model_state)
                 self.refrence_state_h=self.get_h(refrence_state)
 
+    #模型预测结果
     def compute_score_mine(self):
         reshaped = tf.concat([self.context_state_h, self.model_state_h], 1)
         reshaped = tf.concat([reshaped, self.refrence_state_h], 1)
@@ -143,11 +156,13 @@ class ADEM_model(object):
         b=tf.nn.relu(tf.matmul(a,self.w2))+self.bais2
         self.model_score=tf.matmul(b,self.w3)
 
+    #模型预测结果，adem论文方法
     def compute_score_adem(self):
         self.model_score = (tf.reduce_sum((self.context_state_h * tf.matmul(self.model_state_h, self.M)), axis=1) +
                  tf.reduce_sum((self.refrence_state_h * tf.matmul(self.model_state_h, self.N)), axis=1) -
                  self.Alpha) / self.Beta
 
+    #定义loss
     def compute_loss(self):
         human_score = tf.reshape(self.human_score, shape=[-1, 1])
         model_score = tf.reshape(self.model_score, shape=[-1, 1])
@@ -168,7 +183,7 @@ class ADEM_model(object):
         else:
             self.loss = tf.reduce_sum(tf.square(human_score - model_score) * grad_ys)
 
-
+    #训练op
     def _train(self):
         trainable_variables = tf.trainable_variables()
         grads = tf.gradients(self.loss, trainable_variables)
@@ -176,45 +191,32 @@ class ADEM_model(object):
         opt = tf.train.AdadeltaOptimizer(learning_rate=self.config['LR'])
         self.train_op = opt.apply_gradients(zip(grads, trainable_variables))
 
-    def train_on_batch(self, session, step, feed_dict_):
-        feed_dict = {self.context_input: feed_dict_['context_input'],
-                     self.context_sequence_length: feed_dict_['context_sequence_length'],
-                     self.model_response_input: feed_dict_['model_input'],
-                     self.refrence_response_input: feed_dict_['refrence_input'],
-                     self.model_sequence_length: feed_dict_['model_sequence_length'],
-                     self.refrence_sequence_length: feed_dict_['refrence_sequence_length'],
-                     self.human_score: feed_dict_['human_score'],
-                     self.grad_ys: feed_dict_['grad_ys']
-                     }
+    #训练一个batch
+    def train_on_batch(self, session, step, feed_dict):
         loss, _ = session.run([self.loss, self.train_op], feed_dict=feed_dict)
         if step % 100 == 0 and step != 0:
             print('After %d steps,per token loss is %.3f' % (step, loss))
         step += 1
         return step
 
-    def predict_on_batch(self, session, feed_dict_):
-        feed_dict = {self.context_input: feed_dict_['context_input'],
-                     self.context_sequence_length: feed_dict_['context_sequence_length'],
-                     self.model_response_input: feed_dict_['model_input'],
-                     self.refrence_response_input: feed_dict_['refrence_input'],
-                     self.model_sequence_length: feed_dict_['model_sequence_length'],
-                     self.refrence_sequence_length: feed_dict_['refrence_sequence_length']
-                     }
+    #预测一个batch
+    def predict_on_batch(self, session, feed_dict):
         model_score = session.run(self.model_score, feed_dict=feed_dict)
         return model_score
 
     '''
-    根据context final state分别计算其与refrence response和model response的attention，将attention的结果作为最终编码。
+    根据context final state分别计算其与 refrence response 和 model response 的 attention，将attention的结果作为最终编码。
     采用的相似度计算方法：
-    Alpha = h ✖ M ✖ context_state.T
+    Alpha = h_t ✖ M ✖ context_state.T
     步骤分解如下：
-        # tmp = tf.matmul(context_state, self.attention_weight)
-        # tmp = tf.matmul(outputs, tf.reshape(tmp, shape=[-1, self.HIDDEN_SIZE, 1]))
-        # tmp = tf.reshape(tmp, [-1, 18])
-        # tmp = tmp * tf.sequence_mask(length, self.max_len, dtype=tf.float32)
-        # tmp = tf.nn.softmax(tmp)
-        # tmp = tf.matmul(tf.reshape(tmp, shape=[-1, 1, 18]), outputs)
+        # step1 = tf.matmul(context_state, self.attention_weight)
+        # step2 = tf.matmul(outputs, tf.reshape(step1, shape=[-1, self.HIDDEN_SIZE, 1]))
+        # step3 = tf.reshape(step2, [-1, 18])
+        # step4 = step3 * tf.sequence_mask(length, self.max_len, dtype=tf.float32)
+        # step5 = tf.nn.softmax(step4)
+        # step6 = tf.matmul(tf.reshape(step5, shape=[-1, 1, 18]), outputs)
     '''
+
     def attetion(self, context_state, outputs, length):
         return tf.reshape(
             tf.matmul(
@@ -227,16 +229,17 @@ class ADEM_model(object):
                                         context_state, self.attention_weight), shape=[-1, self.HIDDEN_SIZE, 1])), [-1, 18]) * tf.sequence_mask(
                             length, self.max_len, dtype=tf.float32)), shape=[-1, 1, 18]), outputs),shape=[-1, self.HIDDEN_SIZE])
 
-
+    #github上的第三方实现版本采用的l1正则，所以在这里保留了
     def matrix_l1_norm(self,matrix):
         matrix = tf.cast(matrix, tf.float32)
         abs_matrix = tf.abs(matrix)
         row_max = tf.reduce_max(abs_matrix, axis=1)
         return tf.reduce_sum(row_max)
 
+
     def get_h(self,state):
-        c,h=state[0]
-        h=tf.reshape(h,[-1,self.HIDDEN_SIZE*self.NUM_LAYERS])
+        c,h=state[-1]
+        h=tf.reshape(h,[-1,self.HIDDEN_SIZE])
         return h
 
     def cast_to_float32(self,tensor_list):
@@ -309,12 +312,12 @@ class ADEM_model(object):
                 true_response.append(np.array(true_response_tmp))
                 model_response.append(np.array(model_response_tmp))
 
-                return self.predict_on_batch(sess,feed_dict_={'context_input':np.array(context),
-                                                              'refrence_input':np.array(true_response),
-                                                              'model_input':np.array(model_response),
-                                                              'context_sequence_length':np.array(context_mask),
-                                                              'refrence_sequence_length':np.array(true_response_mask),
-                                                              'model_sequence_length':np.array(model_response_mask)})
+                return self.predict_on_batch(sess,feed_dict={self.context_input:np.array(context),
+                                                              self.refrence_response_input:np.array(true_response),
+                                                              self.model_response_input:np.array(model_response),
+                                                              self.context_sequence_length:np.array(context_mask),
+                                                              self.refrence_sequence_length:np.array(true_response_mask),
+                                                              self.model_sequence_length:np.array(model_response_mask)})
 
 
 

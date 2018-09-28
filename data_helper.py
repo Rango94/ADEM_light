@@ -25,8 +25,8 @@ class data_helper:
             self.data_pre='../DATA_8/'
         elif data_flag=='9':
             self.data_pre = '../DATA_9/'
-        elif data_flag=='orgin':
-            self.data_pre = '../DATA_orgin/'
+        elif data_flag=='origin':
+            self.data_pre = '../DATA_origin/'
         elif data_flag=='all':
             self.data_pre='../DATA/'
 
@@ -71,6 +71,7 @@ class data_helper:
 
         self.cont_dic = {0: 221604, 1: 54029, 2: 245302, 3: 245664, 4: 56014}
 
+        #计算权重，权重和频率成反比。
         for key in self.cont_dic:
             self.cont_dic[key] = math.pow(float(54029) / float(self.cont_dic[key]), 0.5)
 
@@ -78,13 +79,10 @@ class data_helper:
         self.word_dic=json.load(codecs.open(self.DIC_FILE,'r','utf-8'))
         self.vocab_size = len(self.word_dic)
 
-
-
+    #随机生成负样本
     def generate_negative_sample(self):
         context, true_response, model_response=[[self.get_random() for i in range(rd.randint(1, self.max_len))] for _ in range(3)]
-        human_score=0
-        grads_wt=0.5
-        return context, true_response, model_response,human_score,grads_wt
+        return context, true_response, model_response,0,0.5
 
     def get_random(self):
         idx=rd.randint(1,self.vocab_size)
@@ -92,7 +90,7 @@ class data_helper:
             idx = rd.randint(1, self.vocab_size)
         return idx
 
-
+    #随机生成句子级别的负样本
     def generate_negative_sample_seq(self):
         while True:
             line = self.corpus_train.readline()
@@ -135,7 +133,7 @@ class data_helper:
 
         return context_tmp,true_response_tmp,model_response_tmp,0,0.5
 
-
+    #获取一个batch
     def next_batch(self,size):
         context=[]
         true_response=[]
@@ -146,43 +144,46 @@ class data_helper:
         true_response_mask=[]
         grads_wt=[]
         while size>0:
-            if rd.random()>0.7:
-                continue
-            if rd.random()<0.9:
-                if rd.random()<0.9:
-                    line=self.corpus_train.readline()
-                    if line=='':
-                        self.corpus_train.close()
-                        self.corpus_train=codecs.open(self.TRAIN_FILE, 'r', 'utf-8')
-                        line=self.corpus_train.readline()
+            if rd.random() > 0.7:
+                continue    #不想挨着顺序取
 
-                    line=line.strip().split('\t')
-                    if line[3]!='0' and line[3]!='1' and line[3]!='2' and line[3]!='3' and line[3]!='4':
+            if rd.random() > 0.9:
+                # 随机生成负样本，该负样本为全随机
+                context_tmp, true_response_tmp, model_response_tmp, human_score_, grads_wt_ = self.generate_negative_sample()
+                human_score.append(human_score_)
+                grads_wt.append(grads_wt_)
+            else:
+                if rd.random() > 0.9:
+                    #随机生成负样本，该负样本为句子级别的拼凑
+                    context_tmp, true_response_tmp, model_response_tmp, human_score_, grads_wt_ = self.generate_negative_sample_seq()
+                    human_score.append(human_score_)
+                    grads_wt.append(grads_wt_)
+                else:
+                    line = self.corpus_train.readline()
+                    if line == '':
+                        self.corpus_train.close()
+                        self.corpus_train = codecs.open(self.TRAIN_FILE, 'r', 'utf-8')
+                        line = self.corpus_train.readline()
+
+                    line = line.strip().split('\t')
+                    if line[3] != '0' and line[3] != '1' and line[3] != '2' and line[3] != '3' and line[3] != '4':
                         continue
 
-                    context_tmp=[int(i) for i in line[0].split(' ')]
+                    context_tmp = [int(i) for i in line[0].split(' ')]
                     true_response_tmp = [int(i) for i in line[1].split(' ')]
                     model_response_tmp = [int(i) for i in line[2].split(' ')]
 
+                    #决定二分类还是回归，默认是回归，但实际上，模型的loss计算只写了回归的部分，如果要做逻辑回归的话，得重写模型的loss
                     if self.cateflag:
                         human_score.append(0 if int(line[3]) <= 2 else 1)
                     else:
                         human_score.append(int(line[3]))
 
+                    #样本权重，只有训练数据会添加样本权重
                     if self.weight:
                         grads_wt.append(self.cont_dic[int(line[3])])
                     else:
                         grads_wt.append(1)
-                else:
-                    context_tmp, true_response_tmp, model_response_tmp,human_score_,grads_wt_=self.generate_negative_sample_seq()
-                    human_score.append(human_score_)
-                    grads_wt.append(grads_wt_)
-
-            else:
-                #随机生成负样本，该副样本为全随机
-                context_tmp, true_response_tmp, model_response_tmp, human_score_, grads_wt_=self.generate_negative_sample()
-                human_score.append(human_score_)
-                grads_wt.append(grads_wt_)
 
             context_mask.append(min(self.max_len, len(context_tmp)))
             true_response_mask.append(min(self.max_len, len(true_response_tmp)))
@@ -211,46 +212,7 @@ class data_helper:
                np.array(true_response_mask),np.array(model_response_mask),\
                np.array(human_score),np.array(grads_wt)
 
-
-    def normal_line(self,line):
-        context = []
-        true_response = []
-        model_response = []
-        context_mask = []
-        model_response_mask = []
-        true_response_mask = []
-        line = line.strip().split('\t')
-        if len(line)!=3:
-            print('line error')
-            return 0
-        context_tmp = [self.word_dic[i] for i in line[0].split(' ')]
-        true_response_tmp = [self.word_dic[i] for i in line[1].split(' ')]
-        model_response_tmp = [self.word_dic[i] for i in line[2].split(' ')]
-
-
-        context_mask.append(min(self.max_len, len(context_tmp)))
-        true_response_mask.append(min(self.max_len, len(true_response_tmp)))
-        model_response_mask.append(min(self.max_len, len(model_response_tmp)))
-
-        while len(context_tmp) < self.max_len:
-            context_tmp.append(0)
-        while len(context_tmp) > self.max_len:
-            context_tmp.pop(-1)
-        while len(true_response_tmp) < self.max_len:
-            true_response_tmp.append(0)
-        while len(true_response_tmp) > self.max_len:
-            true_response_tmp.pop(-1)
-        while len(model_response_tmp) < self.max_len:
-            model_response_tmp.append(0)
-        while len(model_response_tmp) > self.max_len:
-            model_response_tmp.pop(-1)
-
-        context.append(np.array(context_tmp))
-        true_response.append(np.array(true_response_tmp))
-        model_response.append(np.array(model_response_tmp))
-        return np.array(context), np.array(true_response), np.array(model_response), np.array(context_mask), np.array(
-            true_response_mask), np.array(model_response_mask)
-
+    #获取测试数据
     def get_test_data(self):
         context = []
         true_response = []
@@ -277,7 +239,6 @@ class data_helper:
             true_response_mask.append(min(self.max_len,len(true_response_tmp)))
             model_response_mask.append(min(self.max_len,len(model_response_tmp)))
 
-            # human_score.append(int(line[3]))
             if self.cateflag:
                 human_score.append(0 if int(line[3]) <= 2 else 1)
             else:
@@ -300,12 +261,14 @@ class data_helper:
             context.append(np.array(context_tmp))
             true_response.append(np.array(true_response_tmp))
             model_response.append(np.array(model_response_tmp))
+
+
         self.corpus_test.close()
         self.corpus_test = codecs.open(self.TEST_FILE, 'r', 'utf-8')
         return np.array(context), np.array(true_response), np.array(model_response), np.array(context_mask), np.array(
             true_response_mask), np.array(model_response_mask), np.array(human_score), np.array(grads_wt)
 
-
+    #获取验证数据
     def get_val_data(self):
         context = []
         true_response = []
@@ -329,7 +292,6 @@ class data_helper:
                 true_response_tmp = [int(i) for i in line[1].split(' ')]
                 model_response_tmp = [int(i) for i in line[2].split(' ')]
 
-                # human_score.append(int(line[3]))
                 if self.cateflag:
                     human_score.append(0 if int(line[3]) <= 2 else 1)
                 else:
@@ -368,6 +330,7 @@ class data_helper:
             true_response_mask), np.array(model_response_mask), np.array(human_score),np.array(grads_wt)
 
 
+    #写这个方法是为了看一下模型在训练集上的收敛情况
     def get_train_data(self,size=15000):
         rd1=size/200000
         context = []
@@ -396,12 +359,9 @@ class data_helper:
             true_response_tmp = [int(i) for i in line[1].split(' ')]
             model_response_tmp = [int(i) for i in line[2].split(' ')]
 
-
             context_mask.append(min(self.max_len,len(context_tmp)))
             true_response_mask.append(min(self.max_len,len(true_response_tmp)))
             model_response_mask.append(min(self.max_len,len(model_response_tmp)))
-
-            # human_score.append(int(line[3]))
 
             if self.cateflag:
                 human_score.append(0 if int(line[3])<=2 else 1)
@@ -409,7 +369,6 @@ class data_helper:
                 human_score.append(int(line[3]))
 
             grads_wt.append(1)
-            # grads_wt.append(1)
             while len(context_tmp) < self.max_len:
                 context_tmp.append(0)
             while len(context_tmp) > self.max_len:
@@ -432,7 +391,7 @@ class data_helper:
                np.array(true_response_mask), np.array(model_response_mask), \
                np.array(human_score), np.array(grads_wt)
 
-
+    #从特定文件中获取样本，注意这个文件必须是索引文件，不能是源文件。
     def get_specific_data(self,file):
         context = []
         true_response = []
@@ -475,6 +434,7 @@ class data_helper:
         corpus_specific.close()
         return np.array(context), np.array(true_response), np.array(model_response), np.array(context_mask), np.array(
             true_response_mask), np.array(model_response_mask)
+
 
     def builddic(self):
         if not os.path.exists(self.DIC_FILE):

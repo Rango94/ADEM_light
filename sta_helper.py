@@ -6,12 +6,33 @@
 import numpy as np
 import math
 import random as rd
+import os
 
+#线上机器默认是没有matplotlib，如果要使用需要自行安装或者线下使用。
 import matplotlib.pyplot as plt
 
 '''
 写了一些工具函数，主要为了统计相关数据
 '''
+
+#将配置文件展开为string
+def tostring(config):
+    keys_ = config.keys()
+    keys_.sort()
+    return '-'.join([key + '_' + str(config[key]) for key in keys_])
+
+#根据config更改模型名字
+def Rename(root,config_old,config_new):
+    model_name_old = tostring(config_old)
+    model_name_new = tostring(config_new)
+    if model_name_new==model_name_old:
+        return 0
+    else:
+        for file in os.listdir(root):
+            print(file)
+            if model_name_old in file:
+                print '将%s改为%s'%(file,file.replace(model_name_old,model_name_new))
+                os.rename(root+'/'+file, root+'/'+file.replace(model_name_old,model_name_new))
 
 #计算均方根误差
 def RMSE(s1, s2):
